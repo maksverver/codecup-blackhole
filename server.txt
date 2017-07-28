@@ -1,0 +1,42 @@
+Simple server that hosts game states, with support for long polling, to support
+real-time gameplay efficiently.
+
+Currently, there is no verification of states (or even file sizes!) so use this
+only with trusted clients.
+
+Working directory should contain two directories:
+
+  states/  States are stored in here.
+  www/     Static files are served from here.
+
+POST /states
+  Creates a new state.
+  Request body contains state string.
+  Response body contains (URL-safe) state ID.
+  (TBD: should the response contain the ETag of the generated resource?)
+
+PUT /states/${id} If-Match: "${old-etag}"
+  Updates the previous state.
+  Response body will be empty.
+  Returns 200 OK, if the state was succesfully updated.
+  Returns 412 Precondition Failed, if the state does not match.
+  Returns 400 Bad Request, if the id or etag is invalid.
+  Returns 404 if the state does not exist.
+
+GET /states/${id}
+  Retrieves the state.
+  Returns 200 OK, if the state was found.
+  Returns 400 Bad Request, if the id is invalid.
+  Returns 404 Not Found, if the id was not found.
+
+GET /states/${id} If-None-Match: "${old-etag}"
+  Retrieves the state, if it has changed based on the etag. If the state is
+  currently unchanged, the request will block for a limited time, waiting for
+  a change to come in.
+  Returns 200 OK, if the state has changed.
+  Returns 304 Not Modified, if the state was unchanged.
+  Returns 400 Bad Request, if the id or old-etag is invalid.
+  Returns 404 Not Found, if the id was not found.
+
+HEAD /states/${id}
+  Not currently supported.
