@@ -4,7 +4,7 @@ function stripHash(s) {
   return s.startsWith('#') ? s.substr(1) : s;
 }
 
-function updateStateString(stateString) {  
+function updateStateString(stateString) {
   if (stateString === globalStateString) {
     return;
   }
@@ -13,7 +13,7 @@ function updateStateString(stateString) {
     alert('Invalid state string: ' + JSON.stringify(stateString));
     return;
   }
-  
+
   updateState(state);
 
   if (globalStateString === null) {

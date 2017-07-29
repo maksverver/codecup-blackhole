@@ -61,7 +61,7 @@ function initialize() {
   request.addEventListener('load', function() {
     if (request.status != 200) {
       alert('Game retrieval request failed!\n' +
-        'Server returned status code: ' + request.status + '.\n' + 
+        'Server returned status code: ' + request.status + '.\n' +
         'Reload the page to continue.');
     } else {
       setInitialStateString(request.responseText);

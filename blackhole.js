@@ -17,7 +17,7 @@ let BLUE_LABEL_FILL = 'white';
 let BROWN_FIELD_STROKE = '#301000';
 let BROWN_FIELD_FILL = '#402000';
 let EMPTY_LABEL_FILL = '#808080';
-let EMPTY_FIELD_STROKE = '#202020'; 
+let EMPTY_FIELD_STROKE = '#202020';
 let EMPTY_FIELD_FILL = '#e0e0e0';
 
 var globalState = null;
@@ -193,7 +193,7 @@ function drawPieces(canvas, state, selectedPiece) {
 function drawBoard(canvas, state) {
   let context = canvas.getContext('2d');
   context.clearRect(0, 0, canvas.width, canvas.height);
-  
+
   context.beginPath();
   context.moveTo(SCALE*SIZE, SCALE);
   context.lineTo(SCALE*(2*SIZE - 1), SCALE*(1 + SQRT3*(SIZE - 1)));
