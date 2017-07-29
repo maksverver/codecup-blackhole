@@ -1,22 +1,18 @@
 <html>
 <head>
-<title>Black Hole</title>
-<link rel="stylesheet" type="text/css" href="style.css">
+  <title>Black Hole</title>
+  <link rel="stylesheet" type="text/css" href="style.css">
 </head>
 <body>
 <h1>Black Hole</h1>
-<!-- canvas size: 2*SIZE*SCALE x ((SIZE - 1)*sqrt(3) + 2)*SCALE -->
-<div id="game">
-<canvas id="board" width="640" height="565"></canvas>
 
-<!-- canvas size: SCALE*(4*1.6 + 2) x SCALE*(5*1.6 + 2)-->
-<div id="controls">
-<canvas id="pieces" width="336" height="400"></canvas>
-<p id="status"></p>
-</div>
-
-</div><!-- id="game" -->
+<p>
+  <label for="stateString"><b>Initial state:</b> (leave empty for a blank board)</label></br>
+  <input type="text" id="stateString" size="70" autofocus>
+  <input type="button" value="Create New Game" id="createButton">
+</p>
 
 <script type="text/javascript" src="blackhole.js"></script>
+<script type="text/javascript" src="create.js"></script>
 </body>
 </html>

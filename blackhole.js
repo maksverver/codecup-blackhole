@@ -75,13 +75,25 @@ function decodeState(s) {
   };
 }
 
+// Returns a new game state, or null if the move is invalid.
+function doMove(state, u, v, pieceValue) {
+  // We can reuse most of the validation logic in decodeState(). We just have to check
+  // the input values are valid before encoding the move.
+  if (!validCoords(u, v) || pieceValue < -MAX_VALUE || pieceValue > MAX_VALUE) {
+    return null;
+  }
+  return decodeState(encodeState(state) + encodeMove(coordsToIndex(u, v), pieceValue));
+}
+
+function encodeMove(fieldIndex, stoneValue) {
+  if (stoneValue < 0) stoneValue = MAX_VALUE - stoneValue;
+  return BASE36DIGITS.charAt(fieldIndex) + BASE36DIGITS.charAt(stoneValue);
+}
+
 function encodeState(state) {
   let s = '';
-  for (let i = 0; i < state.history.length; ++i) {
-    let f = state.history[i].fieldIndex;
-    let v = state.history[i].stoneValue;
-    if (v < 0) v = MAX_VALUE - v;
-    s += BASE36DIGITS.charAt(f) + BASE36DIGITS.charAt(v);
+  for (let move of state.history) {
+    s += encodeMove(move.fieldIndex, move.stoneValue);
   }
   return s;
 }
@@ -247,24 +259,6 @@ function drawBoard(canvas, state) {
   }
 }
 
-let boardCanvas = document.getElementById('board');
-let piecesCanvas = document.getElementById('pieces');
-var statusElem = document.getElementById('status');
-
-boardCanvas.addEventListener('click', function(event) {
-  var rect = this.getBoundingClientRect();
-  var x = event.clientX - rect.left;
-  var y = event.clientY - rect.top;
-  for (let u = 0; u < SIZE; ++u) {
-    for (let v = 0; u + v < SIZE; ++v) {
-      let coords = boardCoords(u, v);
-      if (Math.hypot(coords.x - x, coords.y - y) < SCALE) {
-        this.dispatchEvent(new CustomEvent('fieldClick', {detail: {u: u, v: v}}));
-      }
-    }
-  }
-});
-
 function updateStatusMessage(statusElem, state) {
   var statusMessage;
   if (state.nextPlayer === 0) {
@@ -289,51 +283,42 @@ function updateState(newState) {
   updateStatusMessage(statusElem, globalState);
 }
 
-// Hack to stop clicks on the canvas from causing surrounding text to be selected.
-boardCanvas.onmousedown = function() {return false};
 
-piecesCanvas.addEventListener('click', function(event) {
-  var rect = this.getBoundingClientRect();
-  var x = event.clientX - rect.left;
-  var y = event.clientY - rect.top;
-  var r = Math.floor(y/(SCALE*1.6));
-  var c = Math.floor(x/(SCALE*1.6));
-  var value = 5*r + c + 1;
-  if (value > MAX_VALUE) value = MAX_VALUE - value;
-  this.dispatchEvent(new CustomEvent('pieceClick', {detail: {value: value}}));
-});
+let boardCanvas = document.getElementById('board');
+let piecesCanvas = document.getElementById('pieces');
+var statusElem = document.getElementById('status');
 
-// Hack to stop clicks on the canvas from causing surrounding text to be selected.
-piecesCanvas.onmousedown = function() {return false};
+if (boardCanvas) {
+  boardCanvas.addEventListener('click', function(event) {
+    var rect = this.getBoundingClientRect();
+    var x = event.clientX - rect.left;
+    var y = event.clientY - rect.top;
+    for (let u = 0; u < SIZE; ++u) {
+      for (let v = 0; u + v < SIZE; ++v) {
+        let coords = boardCoords(u, v);
+        if (Math.hypot(coords.x - x, coords.y - y) < SCALE) {
+          this.dispatchEvent(new CustomEvent('fieldClick', {detail: {u: u, v: v}}));
+        }
+      }
+    }
+  });
 
-function initialize(stateString) {
-  let state = decodeState(stateString);
-  if (!state) {
-    alert('Invalid state string: ' + stateString);
-  } else {
-    updateState(state);
-
-    boardCanvas.addEventListener('fieldClick', function(event) {
-      let u = event.detail.u;
-      let v = event.detail.v;
-      // ...
-      console.log('Field ' + coordsToString(u, v) + ' clicked');
-    });
-
-    piecesCanvas.addEventListener('pieceClick', function(event) {
-      let value = event.detail.value;
-      setSelectedPiece(value == globalSelectedPiece ? 0 : value);
-      event.stopPropagation();
-    });
-
-  }
+  // Hack to stop clicks on the canvas from causing surrounding text to be selected.
+  boardCanvas.onmousedown = function() {return false};
 }
 
-//initialize('t0v04060f0nf8ojebuadotqc9l1bsicarje92px8grh7lh31isw6dnp5yqz3mk04um52kg');
-//initialize('t0v04060f0nf8ojebuadotqc9l1bsicarje92px8grh7lh31isw6dnp5yqz3mk04');
-initialize('t0v04060f0nf8ojebuadotqc');
+if (piecesCanvas) {
+  piecesCanvas.addEventListener('click', function(event) {
+    var rect = this.getBoundingClientRect();
+    var x = event.clientX - rect.left;
+    var y = event.clientY - rect.top;
+    var r = Math.floor(y/(SCALE*1.6));
+    var c = Math.floor(x/(SCALE*1.6));
+    var value = 5*r + c + 1;
+    if (value > MAX_VALUE) value = MAX_VALUE - value;
+    this.dispatchEvent(new CustomEvent('pieceClick', {detail: {value: value}}));
+  });
 
-// TODO:
-//  show move history?
-//  analyze mode: create game from state string (allow playing, and maybe undo?)
-//  create new game & play interactively (allow undo?)
+  // Hack to stop clicks on the canvas from causing surrounding text to be selected.
+  piecesCanvas.onmousedown = function() {return false};
+}

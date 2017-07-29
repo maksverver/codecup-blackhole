@@ -1,0 +1,7 @@
+ - should have some standard code to encode/decode window.location.hash
+ - show move history?
+ - analyze mode: create game from state string (allow playing, and maybe undo?)
+ - create new game & play interactively (allow undo?)
+
+Note: if I want to develop this further, I should probably redesign/refactor
+the existing code so it doesn't rely on global variables.

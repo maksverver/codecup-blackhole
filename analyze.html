@@ -1,0 +1,23 @@
+<html>
+<head>
+  <title>Black Hole</title>
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+<h1>Black Hole</h1>
+
+<div id="game">
+  <!-- canvas size: 2*SIZE*SCALE x ((SIZE - 1)*sqrt(3) + 2)*SCALE -->
+  <canvas id="board" width="640" height="565"></canvas>
+
+  <!-- canvas size: SCALE*(4*1.6 + 2) x SCALE*(5*1.6 + 2)-->
+  <div id="controls">
+    <canvas id="pieces" width="336" height="400"></canvas>
+    <p id="status"></p>
+  </div><!-- id="controls" -->
+</div><!-- id="game" -->
+
+<script type="text/javascript" src="blackhole.js"></script>
+<script type="text/javascript" src="analyze.js"></script>
+</body>
+</html>
