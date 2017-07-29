@@ -1,0 +1,16 @@
+body {
+  font: 12pt sans-serif;
+}
+
+canvas#board {
+  background: white;
+  float: left;
+}
+
+div#controls {
+  float: left;
+}
+
+canvas#pieces {
+  background: #f0f0f0;
+}
