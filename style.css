@@ -14,3 +14,8 @@ div#controls {
 canvas#pieces {
   background: #f0f0f0;
 }
+
+#stateString {
+  color: #;
+  font: 10pt monospace;
+}

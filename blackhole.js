@@ -272,8 +272,12 @@ function updateStatusMessage(statusElem, state) {
     statusMessage = 'Result: ' + (score > 0 ? '+' + score : score) + '. ' +
         (score > 0 ? 'Red wins!' : score < 0 ? 'Blue wins!' : "It's a tie!");
   }
-  while (statusElem.firstChild) statusElem.removeChild(statusElem.firstChild);
-  statusElem.appendChild(document.createTextNode(statusMessage));
+  replaceText(statusElem, statusMessage);
+}
+
+function replaceText(elem, text) {
+  while (elem.firstChild) elem.removeChild(elem.firstChild);
+  elem.appendChild(document.createTextNode(text));
 }
 
 function updateState(newState) {
@@ -281,12 +285,13 @@ function updateState(newState) {
   drawBoard(boardCanvas, globalState);
   setSelectedPiece(globalSelectedPiece);
   updateStatusMessage(statusElem, globalState);
+  if (stateStringElem) replaceText(stateStringElem, encodeState(newState));
 }
-
 
 let boardCanvas = document.getElementById('board');
 let piecesCanvas = document.getElementById('pieces');
-var statusElem = document.getElementById('status');
+let statusElem = document.getElementById('status');
+let stateStringElem = document.getElementById('stateString');
 
 if (boardCanvas) {
   boardCanvas.addEventListener('click', function(event) {
