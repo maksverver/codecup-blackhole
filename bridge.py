@@ -21,7 +21,7 @@ USAGE = '''Usage:
     Prints the state URL of the newly created game state.
     This can then be used to connect one or more players.
 
-  bridge.py play http://localhost:8027/states/xxxx color player [args]
+  bridge.py join http://localhost:8027/states/xxxx color player [args]
 
     Runs the given player command and interacts with the game state at the given
     state URL. The game state must not have any moves played by this player yet
@@ -30,6 +30,11 @@ USAGE = '''Usage:
     color: either "red" (first player) or "blue" (second player)
     player: path to player executable
     args: additional arguments to pass to executable (optional)
+
+  bridge.py start http://localhost:8027/states color player [args]
+
+    Creates a game, prints its state URL, and then joins it as a player.
+    This is a short-hand for calling create followed by join manually.
 '''
 REQUEST_DELAY = 5.0  # minimum time between GET requests, in seconds
 COLORS = ('red', 'blue')
@@ -55,7 +60,7 @@ def CreateGame(states_url):
   if not state_id:
     print 'Empty response received!'
   else:
-    print states_url + '/' + urllib2.quote(state_id)
+    return states_url + '/' + urllib2.quote(state_id)
 
 def GetNextState(state_url, old_state_string = None, old_etag = None):
   while True:
@@ -138,9 +143,9 @@ def PlayGame(state_url, color, player):
   moves_played = 0
   my_last_move = None
   while moves_played < INITIAL_STONES + 2*MAX_VALUE - 1:
-    previous_state_string = state_string or ''
+    previous_state_string = state_string
     state_string, etag = GetNextState(state_url, state_string, etag)
-    assert state_string.startswith(previous_state_string)
+    assert state_string.startswith(previous_state_string or '')
     assert len(state_string)%2 == 0
     moves_played = len(state_string)//2
     if moves_played > INITIAL_STONES + my_moves_played*2 + my_turn:
@@ -186,8 +191,11 @@ def Main(argv):
       elif len(args) > 1:
         print 'Too many arguments!'
       else:
-        return CreateGame(args[0])
-    elif command == 'play':
+        state_url = CreateGame(args[0])
+        if state_url:
+          print state_url
+        return
+    elif command == 'join':
       if len(args) < 1:
         print 'Missing argument: state URL'
       elif len(args) < 2:
@@ -197,7 +205,23 @@ def Main(argv):
       elif len(args) < 3:
         print 'Missing argument: player command'
       else:
-        return PlayGame(args[0], args[1], args[2:])
+        PlayGame(args[0], args[1], args[2:])
+        return
+    elif command == 'start':
+      if len(args) < 1:
+        print 'Missing argument: states URL'
+      elif len(args) < 2:
+        print 'Missing argument: color to play'
+      elif args[1] not in COLORS:
+        print 'Unknown color: ', args[1]
+      elif len(args) < 3:
+        print 'Missing argument: player command'
+      else:
+        state_url = CreateGame(args[0])
+        if state_url:
+          print state_url
+          PlayGame(state_url, args[1], args[2:])
+        return
     else:
       print 'Unknown command:', command
   print
