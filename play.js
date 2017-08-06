@@ -6,19 +6,18 @@ function stripHash(s) {
   return s.startsWith('#') ? s.substr(1) : s;
 }
 
-function pollForChange(etag) {
-  if (!etag) {
-    alert('Missing ETag response header! Long polling disabled.');
+function pollForChange() {
+  if (!globalLastETag) {
+    alert('Last ETag unknown! Long polling disabled.');
     return;
   }
-  globalLastETag = etag;
   let request = new XMLHttpRequest();
   request.addEventListener('error', function() {
     alert('XMLHttpRequest failed!');
   });
   request.addEventListener('load', function() {
     if (request.status == 304) {  // Not Modified
-      pollForChange(etag);
+      pollForChange();
     } else if (request.status != 200) {
       alert('Game retrieval request failed!\n' +
         'Server returned status code: ' + request.status + '.\n' +
@@ -31,23 +30,25 @@ function pollForChange(etag) {
       } else {
         updateState(newState);
       }
-      let newEtag = request.getResponseHeader('ETag');
-      if (!newEtag) {
+      let newETag = request.getResponseHeader('ETag');
+      if (!newETag) {
         alert('Missing ETag header in response! Polling disabled.');
       } else {
         let requestDelay = 100;  // milliseconds
-        if (newEtag == etag) {
+        if (newETag == globalLastETag) {
           // Prevent request-looping too quickly if the server didn't block due
           // to a misconfiguration.
           requestDelay = 2000;
           console.log('ETag was unchanged! Sleeping for 2 seconds before retry.');
+        } else {
+          globalLastETag = newETag;
         }
-        setTimeout(function(){ pollForChange(newEtag); }, requestDelay);
+        setTimeout(pollForChange, requestDelay);
       }
     }
   });
   request.open('GET', globalStateUrl);
-  request.setRequestHeader('If-None-Match', etag);
+  request.setRequestHeader('If-None-Match', globalLastETag);
   request.send();
 }
 
@@ -114,7 +115,8 @@ function initialize() {
         'Reload the page to continue.');
     } else {
       setInitialStateString(request.responseText);
-      pollForChange(request.getResponseHeader('ETag'));
+      globalLastETag = request.getResponseHeader('ETag');
+      pollForChange();
     }
   });
   request.open('GET', globalStateUrl);
