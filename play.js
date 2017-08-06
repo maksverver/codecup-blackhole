@@ -32,7 +32,19 @@ function pollForChange(etag) {
       } else {
         updateState(newState);
       }
-      pollForChange(request.getResponseHeader('ETag'));
+      let newEtag = request.getResponseHeader('ETag');
+      if (!newEtag) {
+        alert('Missing ETag header in response! Polling disabled.');
+      } else {
+        let requestDelay = 100;  // milliseconds
+        if (newEtag == etag) {
+          // Prevent request-looping too quickly if the server didn't block due
+          // to a misconfiguration.
+          requestDelay = 2000;
+          console.log('ETag was unchanged! Sleeping for 2 seconds before retry.');
+        }
+        setTimeout(function(){ pollForChange(newEtag); }, requestDelay);
+      }
     }
   });
   request.open('GET', globalStateUrl);
