@@ -16,9 +16,11 @@ let BLUE_FIELD_FILL = '#0000a0';
 let BLUE_LABEL_FILL = 'white';
 let BROWN_FIELD_STROKE = '#301000';
 let BROWN_FIELD_FILL = '#402000';
-let EMPTY_LABEL_FILL = '#808080';
+let EMPTY_LABEL_FILL = '#a0a0a0';
 let EMPTY_FIELD_STROKE = '#202020';
 let EMPTY_FIELD_FILL = '#e0e0e0';
+let EMPTY_RED_LABEL_FILL = '#ffa0a0';
+let EMPTY_BLUE_LABEL_FILL = '#a0a0ff';
 
 var globalState = null;
 var globalSelectedPiece = 0;
@@ -126,15 +128,23 @@ function neighbours(u, v) {
   return neighbours;
 }
 
+function calculateFieldInfluence(state, u, v) {
+  let red = 0, blue = 0;
+  for (let neighbour of neighbours(u, v)) {
+    let v = state.fields[coordsToIndex(neighbour.u, neighbour.v)];
+    if (v > 0) red += v;
+    if (v < 0) blue -= v;
+  }
+  return [red, blue];
+}
+
 function calculateScore(state) {
   var delta = 0;
   for (let u = 0; u < SIZE; ++u) {
     for (let v = 0; u + v < SIZE; ++v) {
       if (state.fields[coordsToIndex(u, v)] === null) {
-        for (let neighbour of neighbours(u, v)) {
-          let v = state.fields[coordsToIndex(neighbour.u, neighbour.v)];
-          if (v) delta += v;
-        }
+        let scores = calculateFieldInfluence(state, u, v);
+        delta += scores[0] - scores[1];
       }
     }
   }
@@ -214,9 +224,19 @@ function drawBoard(canvas, state) {
       if (field === null) {
         fieldStroke = EMPTY_FIELD_STROKE;
         fieldFill = EMPTY_FIELD_FILL;
-        labelFont = '32px sans-serif'
-        labelFill = EMPTY_LABEL_FILL;
-        labelText = coordsToString(u, v);
+        let scores = calculateFieldInfluence(state, u, v);
+        if (scores[0] || scores[1]) {
+          let score = scores[0] - scores[1];
+          labelFont = '24px sans-serif'
+          labelText = (score > 0 ? '+' : '') + score;
+          labelFill =
+              score > 0 ? EMPTY_RED_LABEL_FILL :
+              score < 0 ? EMPTY_BLUE_LABEL_FILL : EMPTY_LABEL_FILL;
+        } else {
+          labelFill = EMPTY_LABEL_FILL;
+          labelFont = '32px sans-serif'
+          labelText = coordsToString(u, v);
+        }
       } else if (field == 0) {
         fieldStroke = BROWN_FIELD_STROKE;
         fieldFill = BROWN_FIELD_FILL;
@@ -241,7 +261,7 @@ function drawBoard(canvas, state) {
       context.fill();
       context.strokeStyle = fieldStroke;
       context.stroke();
-      if (labelText) {
+      if (labelText !== null) {
         context.font = labelFont;
         context.textAlign = 'center';
         context.textBaseline = 'middle';
