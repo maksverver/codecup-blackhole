@@ -8,6 +8,7 @@
 # See ../server/server.txt for the web protocol.
 
 import random
+import subprocess
 import sys
 import time
 import urllib2
@@ -30,11 +31,13 @@ USAGE = '''Usage:
     player: path to player executable
     args: additional arguments to pass to executable (optional)
 '''
+REQUEST_DELAY = 5.0  # minimum time between GET requests, in seconds
 COLORS = ('red', 'blue')
 FIELDS = [chr(ord('A') + u) + str(v + 1) for u in range(8) for v in range(8 - u)]
 BASE36DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz'
 INITIAL_STONES = 5
-REQUEST_DELAY = 5.0  # minimum time between GET requests, in seconds
+MAX_VALUE = 15
+assert len(FIELDS) == len(BASE36DIGITS) == INITIAL_STONES + 2*MAX_VALUE + 1 == 36
 
 def GenerateInitialStateString():
   return ''.join(
@@ -96,13 +99,80 @@ def PutState(state_url, new_state_string, old_etag):
   response = urllib2.urlopen(request)
   assert response.getcode() == 200
 
+def ParsePlayerMove(s):
+  '''Parses a move of the form A1=1, and returns it as (field_index, value), or
+     returns None if the move is not formatted correctly.'''
+  if s.count('=') != 1:
+    return None
+  field, value = s.split('=')
+  try:
+    field = FIELDS.index(field)
+    value = int(value)
+  except ValueError:
+    return None
+  if value < 1 or value > MAX_VALUE:
+    return None
+  return (field, value)
+
+def ParseCompactMove(s, move_index):
+  assert len(s) == 2
+  field = BASE36DIGITS.index(s[0])
+  value = BASE36DIGITS.index(s[1])
+  move_index -= INITIAL_STONES
+  if move_index >= 0:
+    value -= move_index%2*MAX_VALUE
+  return (field, value)
+
 def PlayGame(state_url, color, player):
-  state_string = etag = None
-  while True:
+  my_turn = COLORS.index(color)
+  proc = subprocess.Popen(player, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+  def WriteLine(s):
+    proc.stdin.write(s + '\n')
+    proc.stdin.flush()
+  def ReadLine():
+    return proc.stdout.readline().strip()
+  state_string = None
+  etag = None
+  moves_sent = 0
+  my_moves_played = 0
+  moves_played = 0
+  my_last_move = None
+  while moves_played < INITIAL_STONES + 2*MAX_VALUE - 1:
+    previous_state_string = state_string or ''
     state_string, etag = GetNextState(state_url, state_string, etag)
-    # TODO: check if its our turn, if so, get move from player, and PUT new state.
-    if False:
-      PutState(state_url, state_string, etag)
+    assert state_string.startswith(previous_state_string)
+    assert len(state_string)%2 == 0
+    moves_played = len(state_string)//2
+    if moves_played > INITIAL_STONES + my_moves_played*2 + my_turn:
+      print 'Invalid game state! Too many moves have been played.'
+      break
+    while moves_sent < moves_played:
+      encoded_move = state_string[2*moves_sent:2*moves_sent + 2]
+      field, value = ParseCompactMove(encoded_move, moves_sent)
+      if moves_sent < INITIAL_STONES:
+        assert value == 0
+        WriteLine(FIELDS[field])
+      elif (moves_sent - INITIAL_STONES)%2 == my_turn:
+        # No need to send the player's own moves back to the player program.
+        assert encoded_move == my_last_move
+      else:
+        assert 1 <= value <= MAX_VALUE
+        WriteLine(FIELDS[field] + '=' + str(value))
+      moves_sent += 1
+    if moves_played == INITIAL_STONES + my_moves_played*2 + my_turn:
+      # It's my player's turn!
+      if moves_played == INITIAL_STONES:
+        WriteLine('Start')
+      line = ReadLine()
+      move = ParsePlayerMove(line)
+      if move is None:
+        print 'Player sent an invalid move:', line
+        break
+      my_last_move = BASE36DIGITS[move[0]] + BASE36DIGITS[move[1] + MAX_VALUE*my_turn]
+      my_moves_played += 1
+      PutState(state_url, state_string + my_last_move, etag)
+  WriteLine('Quit')
+  proc.wait()
 
 def Main(argv):
   if len(argv) < 2:
