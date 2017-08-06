@@ -1,7 +1,7 @@
+(function(){
+
+let stateStringInput = document.getElementById('createStateString');
 let createButton = document.getElementById('createButton');
-let stateStringInput = document.getElementById('stateString');
-let globalBaseUrl = window.location.href.substr(0, window.location.href.lastIndexOf('/'));
-let globalStatesUrl = globalBaseUrl + '/states';
 
 function setEnabled(v) {
   createButton.disabled = !v;
@@ -26,11 +26,11 @@ createButton.addEventListener('click', function() {
     } else if (!request.responseText) {
       alert('Missing response text!');
     } else {
-      window.location.href = globalBaseUrl + '/play.html#' + request.responseText;
+      window.location.href = BASE_URL + '/play.html#' + request.responseText;
     }
     setEnabled(true);
   });
-  request.open('POST', globalStatesUrl);
+  request.open('POST', STATES_URL);
   request.setRequestHeader('Content-Type', 'text/plain');
   request.send(stateString);
 });
@@ -39,3 +39,5 @@ stateStringInput.addEventListener('keyup', function(event) {
   // When hitting enter, simulate clicking the "create" button.
   if (event.keyCode == 13) createButton.click();
 });
+
+})();

@@ -1,18 +1,44 @@
 <html>
 <head>
   <title>Black Hole</title>
-  <link rel="stylesheet" type="text/css" href="style.css">
+  <link rel="stylesheet" type="text/css" href="blackhole.css">
+  <link rel="stylesheet" type="text/css" href="index.css">
 </head>
 <body>
 <h1>Black Hole</h1>
 
-<p>
-  <label for="stateString"><b>Initial state:</b> (leave empty for a blank board)</label></br>
-  <input type="text" id="stateString" size="70" autofocus>
-  <input type="button" value="Create New Game" id="createButton">
-</p>
+<div class="form">
+  <h2>Create new name</h2>
+  <p>
+    <label for="createStateString"><b>Initial state:</b> (leave empty for a blank board)</label></br>
+    <input type="text" id="createStateString" size="70" autofocus>
+  </p>
+  <p><input type="button" value="Create New Game" id="createButton"></p>
+</div>
 
+<div class="form">
+  <h2>Join existing game</h2>
+  <p>
+    <label for="joinStateId"><b>State ID:</b> (either ID only, or entire state URL)</label></br>
+    <input type="text" id="joinStateId" size="60">
+  </p>
+  <p><input type="button" value="Join Game" id="joinButton"></p>
+</div>
+
+<div class="form">
+  <h2>Analyze game</h2>
+  <p>
+    <label for="analyzeStateString"><b>State string:</b></label></br>
+    <input type="text" id="analyzeStateString" size="60">
+  </p>
+  <p><input type="button" value="Analyze Game" id="analyzeButton"></p>
+</div>
+
+</div>
+<script type="text/javascript" src="baseurl.js"></script>
 <script type="text/javascript" src="blackhole.js"></script>
-<script type="text/javascript" src="create.js"></script>
+<script type="text/javascript" src="index_create.js"></script>
+<script type="text/javascript" src="index_join.js"></script>
+<script type="text/javascript" src="index_analyze.js"></script>
 </body>
 </html>

@@ -1,6 +1,5 @@
 let globalStateId = stripHash(window.location.hash || "");
-let globalBaseUrl = window.location.href.substr(0, window.location.href.lastIndexOf('/'));
-let globalStateUrl = globalBaseUrl + '/states/' + globalStateId;
+let globalStateUrl = STATES_URL + '/' + globalStateId;
 let globalLastETag = null;
 
 function stripHash(s) {
