@@ -1,10 +1,23 @@
- - should have some standard code to encode/decode window.location.hash;
+ - Analyze: allow moving back and forward through move history
+ - Play: long polling bug!
+   If I create a game in one tab, then join it in another, the other tab stays
+   blank for a long time.  I think this happens because the first tab is long-
+   polling for the game state, while the second one does a regular request
+   (without If-None-Match header). However, the browser will block the second
+    request, too!
+    To fix: add ?poll=1 to URL to enable long-polling?
+      -> this doesn't seem to fix it!
+
+Maybe:
+ - Play: show move history/allow viewing previous states.
+ - Play: allow undoing/resuming from arbitrary position
+   (requires changes to the player protocol to support arbitrary states)
+ - General: add standard code to encode/decode window.location.hash,
    then make stateString and stateId named parameters:
      analyze.html#stateString=blabla
      play.html#stateId=blabla
    (maybe not necessary, if we never need more than one parameter.)
- - show move history? (allow viewing past state without being able to move?)
  - support Undo in Analyze & Play mode?
 
-Note: if I want to develop this further, I should probably redesign/refactor
-the existing code so it doesn't rely on global variables.
+Note: if I want to develop the web frontend further, I should probably
+redesign/refactor the existing code so it doesn't rely on global variables.
