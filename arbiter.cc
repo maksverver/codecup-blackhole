@@ -112,9 +112,37 @@ std::string ReadLine(Player &player) {
   return line;
 }
 
+// Returns a copy of `s` with all non-ASCII characters escaped, using C-style
+// escapes (e.g. "\x09" == tab).
+std::string EscapeString(const std::string &s) {
+  std::string t;
+  t.reserve(s.size() + 2);
+  t += '"';
+  static const char hexdigits[] = "0123456789abcdef";
+  for (char ch : s) {
+    if (ch >= 32 && ch <= 126) {
+      if (ch == '\\' || ch == '"') {
+        t += '\\';
+      }
+      t += ch;
+    } else {
+      t += "\\x";
+      t += hexdigits[(ch & 0xf0) >> 4];
+      t += hexdigits[(ch & 0x0f) >> 0];
+    }
+  }
+  t += '"';
+  return t;
+}
+
 bool Write(Player &player, std::string s) {
-  if (write(player.fd_in, s.data(), s.size()) != static_cast<ssize_t>(s.size())) {
-    fprintf(stderr, "Write [%s] failed!\n", s.c_str());
+  // Temporarily ignore SIGPIPE to avoid aborting the process if the write
+  // fails. This makes this function non-thread-safe!
+  void (*old_handler)(int) = signal(SIGPIPE, SIG_IGN);
+  ssize_t size_written = write(player.fd_in, s.data(), s.size());
+  signal(SIGPIPE, old_handler);
+  if (size_written != static_cast<ssize_t>(s.size())) {
+    fprintf(stderr, "Write %s failed!\n", EscapeString(s).c_str());
     return false;
   }
   return true;
@@ -374,15 +402,14 @@ void Main(const char *command_player1, const char *command_player2) {
     int nextPlayer = ColorToPlayerIndex(nextColor);
     std::string line = ReadLine(players[nextPlayer]);
     if (!ParseMove(line, &move.field, &move.value)) {
-      // TODO: would be nice to print this string with escapes, to detect whitespace errors etc.
-      fprintf(stderr, "Could not parse move from player %d [%s]!\n",
-          nextPlayer, line.c_str());
+      fprintf(stderr, "Could not parse move from player %d %s!\n",
+          nextPlayer, EscapeString(line).c_str());
       break;
     }
     std::string reason;
     if (!ValidateMove(state, move, &reason)) {
-      fprintf(stderr, "Invalid move from player %d [%s]: %s!\n",
-          nextPlayer, line.c_str(), reason.c_str());
+      fprintf(stderr, "Invalid move from player %d %s: %s!\n",
+          nextPlayer, EscapeString(line).c_str(), reason.c_str());
       break;
     }
     ExecuteMove(state, move);
@@ -418,7 +445,6 @@ int main(int argc, char *argv[]) {
     printf("Usage: arbiter <player1> <player2>\n");
     return 1;
   }
-  fprintf(stderr, "TODO: finish TODOs in this file!\n");  // TODO: remove this
   Main(argv[1], argv[2]);
   return 0;
 }
