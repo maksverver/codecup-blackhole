@@ -14,6 +14,7 @@
 #include <string>
 #include <sstream>
 #include <utility>
+#include <vector>
 
 namespace {
 
