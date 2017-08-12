@@ -48,6 +48,42 @@ struct Player {
   const pid_t pid;
 };
 
+int CoordsToFieldIndex(int u, int v) {
+  return SIZE*u - u*(u - 1)/2 + v;
+}
+
+bool AreCoordsValid(int u, int v) {
+  return 0 <= u && u < SIZE && 0 <= v && u + v < SIZE;
+}
+
+int CalculateScore(const State &state) {
+  int score = 0;
+  for (int u1 = 0; u1 < SIZE; ++u1) {
+    for (int v1 = 0; v1 < SIZE - u1; ++v1) {
+      const int i = CoordsToFieldIndex(u1, v1);
+      if (state.fields[i].color == Color::NONE) {
+        for (int du = -1; du <= 1; ++du) {
+          for (int dv = -1; dv <= 1; ++dv) {
+            if ((du != 0 || dv != 0) && abs(du + dv) <= 1) {
+              const int u2 = u1 + du;
+              const int v2 = v1 + dv;
+              if (AreCoordsValid(u2, v2)) {
+                const int j = CoordsToFieldIndex(u2, v2);
+                if (state.fields[j].color == Color::RED) {
+                  score += state.fields[j].value;
+                } else if (state.fields[j].color == Color::BLUE) {
+                  score -= state.fields[j].value;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return score;
+}
+
 std::string ReadLine(Player &player) {
   // In theory, the player is allowed to write less or more than one line at a
   // time. However, we currently don't support that. We expect to read exactly
@@ -206,30 +242,70 @@ bool ParseMove(const std::string &s, int *field_out, int *value_out) {
   return true;
 }
 
-bool ValidateMove(const State &state, const Move &move) {
-  if (move.color != (state.turns%2 == 0 ? Color::RED : Color::BLUE) ||
-      move.field < 0 || move.field >= NUM_FIELDS ||
-      move.value < 1 || move.value > MAX_VALUE) {
+Color NextColor(const State &state) {
+  if (state.turns < INITIAL_STONES) return Color::BROWN;
+  if (state.turns >= INITIAL_STONES + 2*MAX_VALUE) return Color::NONE;
+  return ((state.turns - INITIAL_STONES) & 1) == 0 ? Color::RED : Color::BLUE;
+}
+
+int ColorToPlayerIndex(Color color) {
+  if (color == Color::RED) return 0;
+  if (color == Color::BLUE) return 1;
+  assert(false);
+  return -1;
+}
+
+bool ValidateMove(const State &state, const Move &move, std::string *reason = nullptr) {
+  if (move.field < 0 || move.field >= NUM_FIELDS) {
+    if (reason) *reason = "field index out of range";
     return false;
   }
-  // TODO: check that field is free
-  // TODO: check that player has not used stone of this value yet
-  return true;
+  if (state.fields[move.field].color != Color::NONE) {
+    if (reason) *reason = "field is not empty";
+    return false;
+  }
+  if (move.color != NextColor(state)) {
+    if (reason) *reason = "color does not match next color to move";
+    return false;
+  }
+  if (move.color == Color::BROWN) {
+    if (move.value != 0) {
+      if (reason) *reason = "brown stone cannot have value";
+      return false;
+    }
+    return true;
+  }
+  if (move.color == Color::RED || move.color == Color::BLUE) {
+    if (move.value < 1 || move.value > MAX_VALUE) {
+      if (reason) *reason = "stone value out of range";
+      return false;
+    }
+    if (state.used[ColorToPlayerIndex(move.color)][move.value - 1]) {
+      if (reason) *reason = "stone value has been used";
+      return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 void ExecuteMove(State &state, const Move &move) {
   assert(move.field >= 0 && move.field < NUM_FIELDS);
   Field &field = state.fields[move.field];
-  if (move.color == Color::BROWN) {
-    assert(state.turns == 0);
+  assert(field.color == Color::NONE);
+  if (state.turns < INITIAL_STONES) {
+    assert(move.color == Color::BROWN);
+    assert(move.value == 0);
     field.color = move.color;
-    return;
+  } else {
+    int player = (state.turns - INITIAL_STONES) & 1;
+    assert(move.color == (player == 0 ? Color::RED : Color::BLUE));
+    field.color = move.color;
+    assert(move.value > 0 && move.value <= MAX_VALUE);
+    field.value = move.value;
+    assert(!state.used[player][move.value - 1]);
+    state.used[player][move.value - 1] = true;
   }
-  assert(move.color == (state.turns%2 == 0 ? Color::RED : Color::BLUE));
-  field.color = move.color;
-  assert(move.value > 0 && move.value <= MAX_VALUE);
-  field.value = move.value;
-  // TODO: take piece away from player!
   state.turns++;
 }
 
@@ -276,7 +352,7 @@ void Main(const char *command_player1, const char *command_player2) {
       fields[i] = i;
     }
     uint64_t seed = GetRandomSeed();
-    for (int i = 0; i < INITIAL_STONES; ++i) {
+    for (int i = 0; NextColor(state) == Color::BROWN; ++i) {
       int n = NUM_FIELDS - i;
       std::swap(fields[i], fields[i + seed%n]);
       seed /= n;
@@ -291,33 +367,48 @@ void Main(const char *command_player1, const char *command_player2) {
     }
   }
   Write(players[0], "Start\n");
-  int turn = 0;
-  for (; turn < MAX_VALUE*2; ++turn) {
-    int player = turn%2;
+  Color nextColor = NextColor(state);
+  while (nextColor != Color::NONE) {
     Move move;
-    move.color = {player == 0 ? Color::RED : Color::BLUE};
-    std::string line = ReadLine(players[player]);
+    move.color = nextColor;
+    int nextPlayer = ColorToPlayerIndex(nextColor);
+    std::string line = ReadLine(players[nextPlayer]);
     if (!ParseMove(line, &move.field, &move.value)) {
       // TODO: would be nice to print this string with escapes, to detect whitespace errors etc.
-      fprintf(stderr, "Could not parse move from player %d [%s]!\n", player, line.c_str());
+      fprintf(stderr, "Could not parse move from player %d [%s]!\n",
+          nextPlayer, line.c_str());
       break;
     }
-    // TODO: this is not yet implemented!
-    if (!ValidateMove(state, move)) {
-      fprintf(stderr, "Invalid move from player %d [%s]!\n", player, line.c_str());
+    std::string reason;
+    if (!ValidateMove(state, move, &reason)) {
+      fprintf(stderr, "Invalid move from player %d [%s]: %s!\n",
+          nextPlayer, line.c_str(), reason.c_str());
       break;
     }
     ExecuteMove(state, move);
     history.push_back(move);
-    if (turn + 1 < MAX_VALUE*2) {
+    nextColor = NextColor(state);
+    if (nextColor != Color::NONE) {
       // Send player's move to other player.
       std::string line = FormatMove(move) + '\n';
-      Write(players[1 - player], line);
+      Write(players[1 - nextPlayer], line);
     }
   }
-  // TODO: if turn < MAX_VALUE*2, then player turn%2 got disqualified and should receive a very negative score (e.g. +99/-99?)
-  // TODO: evaluate & print final score, and print/log transcript
-  printf("%s\n", EncodeHistory(history).c_str());
+  int score = 0;
+  if (nextColor == Color::NONE) {
+    // Regular game end.
+    score = CalculateScore(state);
+  } else if (nextColor == Color::RED) {
+    // Red made an illegal move. Blue wins.
+    score = -99;
+  } else if (nextColor == Color::BLUE) {
+    // Blue made an illegal move. Red wins.
+    score = +99;
+  } else {
+    assert(false);
+  }
+  printf("%s %s%d\n",
+      EncodeHistory(history).c_str(), (score > 0 ? "+" : ""), score);
 }
 
 }  // namespace
