@@ -5,6 +5,7 @@
 
 #include <assert.h>
 #include <limits.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -23,6 +24,8 @@ const int SIZE = 8;
 const int NUM_FIELDS = 36;
 const int INITIAL_STONES = 5;
 const int MAX_VALUE = 15;
+
+int max_search_depth = 4;
 
 const int neighbours[36][7] = {
   {1,8,-1},                //  0: A1 -> A2,B1
@@ -75,6 +78,7 @@ struct Move {
   int value;
 };
 
+__attribute__((noreturn))
 void CheckFail(int line, const char *func, const char *expr) {
   fprintf(stderr, "[%s:%d] %s(): CHECK(%s) failed\n", __FILE__, line, func, expr);
   // TODO: print a stack trace?
@@ -85,6 +89,27 @@ void CheckFail(int line, const char *func, const char *expr) {
 #define CHECK(expr) \
     do { if (!(expr)) CheckFail(__LINE__, __func__, #expr); } while(0)
 #define CHECK_EQ(x, y) CHECK((x) == (y))
+
+__attribute__((__format__ (__printf__, 1, 2)))
+string Sprintf(const char *fmt, ...) {
+  string result;
+
+  va_list ap;
+  va_start(ap, fmt);
+  int size = vsnprintf(NULL, 0, fmt, ap);
+  va_end(ap);
+  CHECK(size >= 0);
+
+  result.resize(size + 1);
+
+  va_start(ap, fmt);
+  size = vsnprintf(&result[0], result.size(), fmt, ap);
+  va_end(ap);
+
+  CHECK(size == static_cast<int>(result.size()) - 1);
+  result.resize(size);
+  return result;
+}
 
 const char *FormatMove(const Move &move) {
   static char buf[32];
@@ -170,29 +195,34 @@ const char *ReadNextLine() {
   return buf;
 }
 
-void Validate(const State &state, const vector<Move> history) {
+bool IsValidState(const State &state, const vector<Move> &history, string *reason) {
+#define EXPECT(x, ...) if (!(x)) { if (reason) *reason = Sprintf(__VA_ARGS__); return false; }
   int initial_stones = 0;
   int red_stones = 0;
   int blue_stones = 0;
-  for (int i = 0; i < NUM_FIELDS; ++i) {
-    if (state.occupied[i]) {
-      if (state.value[i] > 0) {
+  for (int field = 0; field < NUM_FIELDS; ++field) {
+    int v = state.value[field];
+    if (state.occupied[field]) {
+      if (v > 0) {
         ++red_stones;
-        CHECK(state.used[0][+state.value[i]]);
-      } else if (state.value[i] < 0) {
-        CHECK(state.used[0][-state.value[i]]);
+        EXPECT(state.used[0][v], "unused red value field=%d v=%d", field, v);
+      } else if (v < 0) {
+        EXPECT(state.used[1][-v], "unused blue value field=%d v=%d", field, -v);
         ++blue_stones;
       } else {
         ++initial_stones;
       }
     } else {
-      CHECK_EQ(state.value[i], 0);
+      EXPECT(v == 0, "unoccupied field=%d v=%d", field, v);
     }
   }
-  CHECK_EQ(initial_stones, INITIAL_STONES);
+  EXPECT(initial_stones == INITIAL_STONES, "initial_stones=%d", initial_stones);
   // Note: moves_played does not count placement of the initial stones.
-  CHECK_EQ(red_stones + blue_stones, state.moves_played);
-  CHECK(red_stones == blue_stones || red_stones == blue_stones + 1);
+  EXPECT(red_stones + blue_stones == state.moves_played,
+      "red_stones=%d + blue_stones=%d != moves_played=%d",
+      red_stones, blue_stones, state.moves_played);
+  EXPECT(red_stones == blue_stones || red_stones == blue_stones + 1,
+      "red_stones=%d blue_stones=%d", red_stones, blue_stones);
 
   int red_values_used = 0;
   int blue_values_used = 0;
@@ -200,23 +230,69 @@ void Validate(const State &state, const vector<Move> history) {
     if (state.used[0][i]) ++red_values_used;
     if (state.used[1][i]) ++blue_values_used;
   }
-  CHECK_EQ(red_values_used, red_stones);
-  CHECK_EQ(blue_values_used, blue_stones);
+  EXPECT(red_values_used == red_stones,
+      "red_values_used=%d red_stones=%d", red_values_used, red_stones);
+  EXPECT(blue_values_used == blue_stones,
+      "blue_values_used=%d blue_stones=%d", blue_values_used, blue_stones);
 
-  CHECK_EQ(state.moves_played, static_cast<int>(history.size()) - INITIAL_STONES);
-  for (size_t i = 0; i < history.size(); ++i) {
+  int history_moves = static_cast<int>(history.size()) - INITIAL_STONES;
+  EXPECT(state.moves_played == history_moves,
+      "state.moves_played=%d history_moves=%d",
+      state.moves_played, history_moves);
+  for (int i = 0; i < static_cast<int>(history.size()); ++i) {
     int field = history[i].field;
     int value = history[i].value;
-    CHECK(state.occupied[field]);
+    EXPECT(state.occupied[field], "not occupied i=%d field=%d", i, field);
     if (i < INITIAL_STONES) {
-      CHECK_EQ(state.value[field], 0);
+      EXPECT(state.value[field] == 0, "not empty i=%d field=%d", i, field);
     } else if (((i - INITIAL_STONES) & 1) == 0) {
-      CHECK(state.used[0][value]);
-      CHECK_EQ(state.value[field], +value);
+      EXPECT(state.used[0][value], "red stone not used i=%d value=%d", i, value);
+      EXPECT(state.value[field] == value,
+          "invalid red field i=%d field=%d expected value=%d actual value=%d",
+          i, field, value, state.value[field]);
     } else {
-      CHECK(state.used[1][value]);
-      CHECK_EQ(state.value[field], -value);
+      EXPECT(state.used[1][value], "blue stone not used i=%d value=%d", i, value);
+      EXPECT(state.value[field] == -value,
+          "invalid blue field i=%d field=%d expected value=%d actual value=%d",
+          i, field, value, state.value[field]);
     }
+  }
+#undef EXPECT
+  return true;
+}
+
+template<class T, int N>
+void DumpArray(const T (&a)[N], FILE *fp) {
+  fputc('{', fp);
+  for (int i = 0; i < N; ++i) {
+    if (i > 0) fputc(',', fp);
+    fprintf(fp, "%d", int{a[i]});
+  }
+  fputc('}', fp);
+}
+
+void DumpState(const State &state, FILE *fp) {
+  fprintf(fp, "state.moves_played=%d", state.moves_played);
+  for (int i = 0; i < 2; ++i) {
+    fprintf(fp, "\nstate.used[%d]=", i);
+    DumpArray(state.used[i], fp);
+  }
+  fputs("\nstate.occupied=", fp);
+  DumpArray(state.occupied, fp);
+  fputs("\nstate.value=", fp);
+  DumpArray(state.value, fp);
+  fputs("\nstate.score=", fp);
+  DumpArray(state.value, fp);
+  fputc('\n', fp);
+}
+
+void Validate(const State &state, const vector<Move> history) {
+  string reason;
+  if (!IsValidState(state, history, &reason)) {
+    fprintf(stderr, "State validation failed: %s\n", reason.c_str());
+    // TODO: print move history (encoded?)
+    DumpState(state, stderr);
+    abort();
   }
 }
 
@@ -265,7 +341,7 @@ int Search(State &state, int depth, vector<Move> *best_moves) {
 
 Move SelectMove(State &state) {
   vector<Move> best_moves;
-  int value = Search(state, 2, &best_moves);
+  int value = Search(state, max_search_depth, &best_moves);
   fprintf(stderr, "value: %d\n", value);
   CHECK(!best_moves.empty());
   // TODO: pick a best move at random
