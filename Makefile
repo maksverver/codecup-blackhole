@@ -1,4 +1,5 @@
-CXXFLAGS=-O2 -Wall -DDEBUG -g
+CXXFLAGS=-Wall -O2 -g -std=c++0x -DDEBUG
+LDLIBS=-lm
 
 all: player
 

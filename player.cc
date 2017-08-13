@@ -1,8 +1,17 @@
+// Disable assertions unless the player is explicitly compiled with -DDEBUG
+#ifndef DEBUG
+#define NDEBUG 1
+#endif
+
+#include <assert.h>
+#include <limits.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -54,7 +63,7 @@ const int neighbours[36][7] = {
   {33,34,-1}};             // 35: H1 -> G1,G2
 
 struct State {
-  int player = 0;
+  int moves_played = 0;  // excludes initial stones!
   bool used[2][MAX_VALUE + 1] = {};
   bool occupied[NUM_FIELDS] = {};
   int value[NUM_FIELDS] = {};  // is this even used for anything?
@@ -68,43 +77,69 @@ struct Move {
 
 void CheckFail(int line, const char *func, const char *expr) {
   fprintf(stderr, "[%s:%d] %s(): CHECK(%s) failed\n", __FILE__, line, func, expr);
-  // TODO: print a stack trace
+  // TODO: print a stack trace?
+  // TODO: dump global state?
   abort();
 }
 
 #define CHECK(expr) \
-  do { if (!(expr)) CheckFail(__LINE__, __func__, #expr); } while(0)
+    do { if (!(expr)) CheckFail(__LINE__, __func__, #expr); } while(0)
+#define CHECK_EQ(x, y) CHECK((x) == (y))
 
-#ifdef DEBUG
-  #define DCHECK(expr) CHECK(expr)
-#else
-  #define DCHECK(expr)
-#endif
+const char *FormatMove(const Move &move) {
+  static char buf[32];
+  int u = 0, v = move.field;
+  while (v >= SIZE - u) {
+    v -= SIZE - u;
+    ++u;
+    CHECK(u < SIZE);
+  }
+  int n = snprintf(buf, sizeof(buf), "%c%d=%d", 'A' + u, v + 1, move.value);
+  CHECK(n > 0 && n < static_cast<int>(sizeof(buf)));
+  return buf;
+}
+
+void MakeHole(State &state, int field) {
+  CHECK(!state.occupied[field]);
+  state.occupied[field] = true;
+}
 
 void DoMove(State &state, const Move &move) {
-  DCHECK(!state.occupied[move.field]);
-  DCHECK(!state.used[state.player][move.value]);
+  assert(!state.occupied[move.field]);
   state.occupied[move.field] = true;
-  state.used[state.player][move.value] = true;
-  int v = state.player == 0 ? move.value : -move.value;
+  int player = state.moves_played & 1;
+  assert(!state.used[player][move.value]);
+  state.used[player][move.value] = true;
+  int v = player == 0 ? move.value : -move.value;
   state.value[move.field] = v;
   for (int i : neighbours[move.field]) {
+    if (i < 0) break;
     state.score[i] += v;
   }
-  state.player = 1 - state.player;
+  ++state.moves_played;
 }
 
 void UndoMove(State &state, const Move &move) {
-  DCHECK(state.occupied[move.field]);
-  DCHECK(state.used[state.player][move.value]);
-  state.player = 1 - state.player;
-  int v = state.player == 0 ? move.value : -move.value;
+  assert(state.moves_played > 0);
+  --state.moves_played;
+  int player = state.moves_played & 1;
+  int v = player == 0 ? move.value : -move.value;
   for (int i : neighbours[move.field]) {
+    if (i < 0) break;
     state.score[i] -= v;
   }
-  state.value[move.field] = v;
-  state.used[state.player][move.value] = false;
+  assert(state.value[move.field] == v);
+  state.value[move.field] = 0;
+  assert(state.used[player][move.value]);
+  state.used[player][move.value] = false;
+  assert(state.occupied[move.field]);
   state.occupied[move.field] = false;
+}
+
+int DecodeBase36Char(char ch) {
+  if (ch >= '0' && ch <= '9') return ch - '0';
+  if (ch >= 'a' && ch <= 'z') return ch - 'a' + 10;
+  return -1;
 }
 
 /*
@@ -113,42 +148,128 @@ char EncodeBase36Char(int i) {
   if (i >= 10 && i < 36) return 'a' + i - 10;
   return '?';
 }
-
-int DecodeBase36Char(char ch) {
-  if (ch >= '0' && ch <= '9') return ch - '0';
-  if (ch >= 'a' && ch <= 'z') return ch - 'a' + 10;
-  return -1;
-}
 */
 
 const char *ReadNextLine() {
   static char buf[100];
-  if (fgets(buf, sizeof(buf), stdin) == NULL) {
+  if (fgets(buf, sizeof(buf), stdin) == nullptr) {
     fprintf(stderr, "EOF reached!\n");
-    return NULL;
+    return nullptr;
   }
   char *eol = strchr(buf, '\n');
-  if (eol == NULL) {
+  if (eol == nullptr) {
     fprintf(stderr, "EOL not found!\n");
-    return NULL;
+    return nullptr;
   }
   CHECK(eol[1] == '\0');
   *eol = '\0';
   if (strcmp(buf, "Quit") == 0) {
     fprintf(stderr, "Quit received.\n");
-    return NULL;
+    return nullptr;
   }
   return buf;
 }
 
+void Validate(const State &state, const vector<Move> history) {
+  int initial_stones = 0;
+  int red_stones = 0;
+  int blue_stones = 0;
+  for (int i = 0; i < NUM_FIELDS; ++i) {
+    if (state.occupied[i]) {
+      if (state.value[i] > 0) {
+        ++red_stones;
+        CHECK(state.used[0][+state.value[i]]);
+      } else if (state.value[i] < 0) {
+        CHECK(state.used[0][-state.value[i]]);
+        ++blue_stones;
+      } else {
+        ++initial_stones;
+      }
+    } else {
+      CHECK_EQ(state.value[i], 0);
+    }
+  }
+  CHECK_EQ(initial_stones, INITIAL_STONES);
+  // Note: moves_played does not count placement of the initial stones.
+  CHECK_EQ(red_stones + blue_stones, state.moves_played);
+  CHECK(red_stones == blue_stones || red_stones == blue_stones + 1);
+
+  int red_values_used = 0;
+  int blue_values_used = 0;
+  for (int i = 1; i <= MAX_VALUE; ++i) {
+    if (state.used[0][i]) ++red_values_used;
+    if (state.used[1][i]) ++blue_values_used;
+  }
+  CHECK_EQ(red_values_used, red_stones);
+  CHECK_EQ(blue_values_used, blue_stones);
+
+  CHECK_EQ(state.moves_played, static_cast<int>(history.size()) - INITIAL_STONES);
+  for (size_t i = 0; i < history.size(); ++i) {
+    int field = history[i].field;
+    int value = history[i].value;
+    CHECK(state.occupied[field]);
+    if (i < INITIAL_STONES) {
+      CHECK_EQ(state.value[field], 0);
+    } else if (((i - INITIAL_STONES) & 1) == 0) {
+      CHECK(state.used[0][value]);
+      CHECK_EQ(state.value[field], +value);
+    } else {
+      CHECK(state.used[1][value]);
+      CHECK_EQ(state.value[field], -value);
+    }
+  }
+}
+
+int Evaluate(State &state) {
+  int score = 0;
+  for (int f = 0; f < NUM_FIELDS; ++f) {
+    if (state.occupied[f]) continue;
+    score += state.score[f] + (
+        state.score[f] > 0 ? +5 :
+        state.score[f] < 0 ? -5 : 0);
+  }
+  return (state.moves_played & 1) == 0 ? score : -score;
+}
+
+int Search(State &state, int depth, vector<Move> *best_moves) {
+  if (depth == 0 || state.moves_played >= 2*MAX_VALUE) {
+    assert(!best_moves);
+    return Evaluate(state);
+  }
+
+  int best_value = INT_MIN;
+
+  // We always play the highest-value piece next.
+  int player = state.moves_played & 1;
+  Move move = {0, MAX_VALUE};
+  while (move.value > 0 && state.used[player][move.value]) --move.value;
+  CHECK(move.value > 0);
+
+  for (; move.field < NUM_FIELDS; ++move.field) {
+    if (state.occupied[move.field]) continue;
+    DoMove(state, move);
+    int value = -Search(state, depth - 1, nullptr);
+    if (best_moves) {
+      // Debug-print top-level evaluation.
+      fprintf(stderr, "depth=%d move=%s value=%d\n", depth, FormatMove(move), value);
+    }
+    if (best_moves) {
+      if (value > best_value) best_moves->clear();
+      if (value >= best_value) best_moves->push_back(move);
+    }
+    if (value > best_value) best_value = value;
+    UndoMove(state, move);
+  }
+  return best_value;
+}
+
 Move SelectMove(State &state) {
-  int value = MAX_VALUE;
-  while (value > 0 && state.used[state.player][value]) --value;
-  CHECK(value > 0);
-  int field = 0;
-  while (field < NUM_FIELDS && state.occupied[field]) ++field;
-  CHECK(field < NUM_FIELDS);
-  return Move{field, value};
+  vector<Move> best_moves;
+  int value = Search(state, 2, &best_moves);
+  fprintf(stderr, "value: %d\n", value);
+  CHECK(!best_moves.empty());
+  // TODO: pick a best move at random
+  return best_moves[0];
 }
 
 int CoordsToFieldIndex(int u, int v) {
@@ -174,53 +295,122 @@ Move ParseMove(const char *line) {
 }
 
 void WriteMove(const Move &move) {
-  int u = 0, v = move.field;
-  while (v >= SIZE - u) {
-    v -= SIZE - u;
-    ++u;
-    CHECK(u < SIZE);
-  }
-  fprintf(stdout, "%c%d=%d\n", 'A' + u, v + 1, move.value);
+  fprintf(stdout, "%s\n", FormatMove(move));
   fflush(stdout);
 }
 
-void Main() {
+State GetState(const vector<Move> &history) {
   State state;
-  const char *line;
-  for (int i = 0; i < INITIAL_STONES; ++i) {
-    if ((line = ReadNextLine()) == NULL) return;
-    int fieldIndex = ParseField(line);
-    CHECK(!state.occupied[fieldIndex]);
-    state.occupied[fieldIndex] = true;
+  for (const Move &move : history) {
+    if (move.value == 0) {
+      MakeHole(state, move.field);
+    } else {
+      DoMove(state, move);
+    }
   }
-  if ((line = ReadNextLine()) == NULL) return;
-  int my_player;
+  Validate(state, history);
+  return state;
+}
+
+void RunGame(vector<Move> history) {
+  State state = GetState(history);
+  const char *line = ReadNextLine();
+  if (line == nullptr) return;
+  int my_player = 1;
   if (strcmp(line, "Start") == 0) {
     my_player = 0;
-  } else {
-    my_player = 1;
-    DoMove(state, ParseMove(line));
+    line = nullptr;
   }
   for (;;) {
+    Validate(state, history);
     Move move;
-    if (state.player == my_player) {
+    int player = state.moves_played & 1;
+    if (player == my_player) {
       move = SelectMove(state);
       WriteMove(move);
     } else {
-      if ((line = ReadNextLine()) == NULL) return;
+      if (line == nullptr) {
+        line = ReadNextLine();
+        if (line == nullptr) return;
+      }
       move = ParseMove(line);
+      line = nullptr;
     }
+    history.push_back(move);
     DoMove(state, move);
   }
+}
+
+vector<Move> ReadInitialStones() {
+  vector<Move> result;
+  vector<Move> moves;
+  State state;
+  for (int i = 0; i < INITIAL_STONES; ++i) {
+    const char *line = ReadNextLine();
+    if (line == nullptr) return result;
+    int field = ParseField(line);
+    if (field < 0 || field >= NUM_FIELDS || state.occupied[field]) return result;
+    MakeHole(state, field);
+    moves.push_back(Move{field, 0});
+  }
+  result.swap(moves);
+  return result;
+}
+
+vector<Move> DecodeStateString(const char *str) {
+  vector<Move> result;
+  vector<Move> moves;
+  State state;
+  int len = strlen(str);
+  if (len < 2*INITIAL_STONES ||
+      len > 2*(INITIAL_STONES + 2*MAX_VALUE) ||
+      len%2 != 0) {
+    return result;
+  }
+  for (int i = 0; i < len; i += 2) {
+    int field = DecodeBase36Char(str[i + 0]);
+    int value = DecodeBase36Char(str[i + 1]);
+    if (state.occupied[field]) {
+      return result;
+    }
+    if (i < 2*INITIAL_STONES) {
+      if (value != 0) return result;
+      MakeHole(state, field);
+      moves.push_back(Move{field, 0});
+    } else {
+      int player = ((i - INITIAL_STONES) >> 1) & 1;
+      value -= player*MAX_VALUE;
+      if (value < 1 || value > MAX_VALUE) return result;
+      if (state.used[player][value]) return result;
+      DoMove(state, Move{field, value});
+      moves.push_back(Move{field, value});
+    }
+  }
+  result.swap(moves);
+  return result;
 }
 
 }  // namespace
 
 int main(int argc, char *argv[]) {
+  vector<Move> history;
   for (int i = 1; i < argc; ++i) {
+    vector<Move> moves = DecodeStateString(argv[i]);
+    if (!moves.empty()) {
+      CHECK(history.empty());
+      history.swap(moves);
+      continue;
+    }
     fprintf(stderr, "Ignored argument %d: [%s]\n", i, argv[i]);
   }
-  Main();
+  if (history.empty()) {
+    history = ReadInitialStones();
+    if (history.empty()) {
+      fprintf(stderr, "Failed to read initial stones!\n");
+      return 1;
+    }
+  }
+  RunGame(std::move(history));
   fprintf(stderr, "Exiting.\n");
   return 0;
 }
