@@ -405,10 +405,11 @@ void RunGame(vector<Move> history) {
   State state = GetState(history);
   const char *line = ReadNextLine();
   if (line == nullptr) return;
-  int my_player = 1;
+  int my_player = (state.moves_played & 1);
   if (strcmp(line, "Start") == 0) {
-    my_player = 0;
     line = nullptr;
+  } else {
+    my_player = 1 - my_player;
   }
   while (!IsGameOver(state)) {
     Validate(state, history);
