@@ -307,7 +307,7 @@ int Evaluate(State &state) {
   return (state.moves_played & 1) == 0 ? score : -score;
 }
 
-int Search(State &state, int depth, vector<Move> *best_moves) {
+int Search(State &state, int depth, int lo, int hi, vector<Move> *best_moves) {
   if (depth == 0 || state.moves_played >= 2*MAX_VALUE) {
     assert(!best_moves);
     return Evaluate(state);
@@ -324,24 +324,33 @@ int Search(State &state, int depth, vector<Move> *best_moves) {
   for (; move.field < NUM_FIELDS; ++move.field) {
     if (state.occupied[move.field]) continue;
     DoMove(state, move);
-    int value = -Search(state, depth - 1, nullptr);
+    int value = -Search(state, depth - 1, -hi, -lo, nullptr);
     if (best_moves) {
       // Debug-print top-level evaluation.
-      fprintf(stderr, "depth=%d move=%s value=%d\n", depth, FormatMove(move), value);
+      fprintf(stderr, "depth=%d move=%s value=%d [%d:%d]\n",
+          depth, FormatMove(move), value, lo, hi);
     }
-    if (best_moves) {
-      if (value > best_value) best_moves->clear();
-      if (value >= best_value) best_moves->push_back(move);
-    }
-    if (value > best_value) best_value = value;
     UndoMove(state, move);
+    if (best_moves && value >= best_value) {
+      // Collect all maximum-value moves in best_moves. This works even when
+      // using alpha-beta pruning, because best_moves is non-null only at the
+      // top level where hi = +inf, so best_value is never approximate and
+      // beta cut-offs do not occur.
+      if (value > best_value) best_moves->clear();
+      best_moves->push_back(move);
+    }
+    if (value > best_value) {
+      best_value = value;
+      if (best_value > lo) lo = value;
+      if (best_value >= hi) break;  // beta cut-off
+    }
   }
   return best_value;
 }
 
 Move SelectMove(State &state) {
   vector<Move> best_moves;
-  int value = Search(state, max_search_depth, &best_moves);
+  int value = Search(state, max_search_depth, -1000, +1000, &best_moves);
   fprintf(stderr, "value: %d\n", value);
   CHECK(!best_moves.empty());
   // TODO: pick a best move at random
