@@ -133,8 +133,13 @@ inline bool IsGameOver(const State &state) {
   return state.moves_played >= 2*MAX_VALUE;
 }
 
+// Returns the next player to move: 0 for red, 1 for blue.
+inline int GetNextPlayer(const State &state) {
+  return state.moves_played & 1;
+}
+
 bool IsValidMove(const State &state, const Move &move) {
-  int player = state.moves_played & 1;
+  const int player = GetNextPlayer(state);
   return
       move.field >= 0 && move.field < NUM_FIELDS && !state.occupied[move.field] &&
       move.value >= 1 && move.value <= MAX_VALUE && !state.used[player][move.value];
@@ -143,7 +148,7 @@ bool IsValidMove(const State &state, const Move &move) {
 void DoMove(State &state, const Move &move) {
   assert(IsValidMove(state, move));
   state.occupied[move.field] = true;
-  int player = state.moves_played & 1;
+  const int player = GetNextPlayer(state);
   state.used[player][move.value] = true;
   int v = player == 0 ? move.value : -move.value;
   state.value[move.field] = v;
@@ -157,7 +162,7 @@ void DoMove(State &state, const Move &move) {
 void UndoMove(State &state, const Move &move) {
   assert(state.moves_played > 0);
   --state.moves_played;
-  int player = state.moves_played & 1;
+  const int player = GetNextPlayer(state);
   int v = player == 0 ? move.value : -move.value;
   for (int i : neighbours[move.field]) {
     if (i < 0) break;
@@ -314,7 +319,7 @@ int Evaluate(State &state) {
         state.score[f] > 0 ? +5 :
         state.score[f] < 0 ? -5 : 0);
   }
-  return (state.moves_played & 1) == 0 ? score : -score;
+  return GetNextPlayer(state) == 0 ? score : -score;
 }
 
 // Negamax depth-first search with alpha-beta pruning.
@@ -333,7 +338,7 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move) {
   int best_value = INT_MIN;
 
   // We always play the highest-value piece next.
-  int player = state.moves_played & 1;
+  const int player = GetNextPlayer(state);
   Move move = {0, MAX_VALUE};
   while (move.value > 0 && state.used[player][move.value]) --move.value;
   CHECK(move.value > 0);
@@ -414,7 +419,7 @@ void RunGame(vector<Move> history) {
   State state = GetState(history);
   const char *line = ReadNextLine();
   if (line == nullptr) return;
-  int my_player = (state.moves_played & 1);
+  int my_player = GetNextPlayer(state);
   if (strcmp(line, "Start") == 0) {
     line = nullptr;
   } else {
@@ -423,8 +428,7 @@ void RunGame(vector<Move> history) {
   while (!IsGameOver(state)) {
     Validate(state, history);
     Move move;
-    int player = state.moves_played & 1;
-    if (player == my_player) {
+    if (GetNextPlayer(state) == my_player) {
       move = SelectMove(state);
       WriteMove(move);
     } else {
