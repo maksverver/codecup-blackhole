@@ -129,6 +129,10 @@ void MakeHole(State &state, int field) {
   state.occupied[field] = true;
 }
 
+inline bool IsGameOver(const State &state) {
+  return state.moves_played >= 2*MAX_VALUE;
+}
+
 void DoMove(State &state, const Move &move) {
   assert(!state.occupied[move.field]);
   state.occupied[move.field] = true;
@@ -308,7 +312,7 @@ int Evaluate(State &state) {
 }
 
 int Search(State &state, int depth, int lo, int hi, vector<Move> *best_moves) {
-  if (depth == 0 || state.moves_played >= 2*MAX_VALUE) {
+  if (depth == 0 || IsGameOver(state)) {
     assert(!best_moves);
     return Evaluate(state);
   }
@@ -406,7 +410,7 @@ void RunGame(vector<Move> history) {
     my_player = 0;
     line = nullptr;
   }
-  for (;;) {
+  while (!IsGameOver(state)) {
     Validate(state, history);
     Move move;
     int player = state.moves_played & 1;
@@ -424,6 +428,7 @@ void RunGame(vector<Move> history) {
     history.push_back(move);
     DoMove(state, move);
   }
+  fprintf(stderr, "Game is over.\n");
 }
 
 vector<Move> ReadInitialStones() {
