@@ -133,11 +133,17 @@ inline bool IsGameOver(const State &state) {
   return state.moves_played >= 2*MAX_VALUE;
 }
 
+bool IsValidMove(const State &state, const Move &move) {
+  int player = state.moves_played & 1;
+  return
+      move.field >= 0 && move.field < NUM_FIELDS && !state.occupied[move.field] &&
+      move.value >= 1 && move.value <= MAX_VALUE && !state.used[player][move.value];
+}
+
 void DoMove(State &state, const Move &move) {
-  assert(!state.occupied[move.field]);
+  assert(IsValidMove(state, move));
   state.occupied[move.field] = true;
   int player = state.moves_played & 1;
-  assert(!state.used[player][move.value]);
   state.used[player][move.value] = true;
   int v = player == 0 ? move.value : -move.value;
   state.value[move.field] = v;
@@ -311,9 +317,16 @@ int Evaluate(State &state) {
   return (state.moves_played & 1) == 0 ? score : -score;
 }
 
-int Search(State &state, int depth, int lo, int hi, vector<Move> *best_moves) {
+// Negamax depth-first search with alpha-beta pruning.
+//
+// If the result is in [lo,hi] (excluding the boundaries), the value is exact.
+// If the result is less than or equal to lo, or greater than or equal to hi,
+// then it is an upper or lower bound on the true value, respectively.
+int Search(State &state, int depth, int lo, int hi, Move *best_move) {
+  assert(lo < hi);  // invariant maintained throughout this function
+
   if (depth == 0 || IsGameOver(state)) {
-    assert(!best_moves);
+    assert(!best_move);
     return Evaluate(state);
   }
 
@@ -329,36 +342,32 @@ int Search(State &state, int depth, int lo, int hi, vector<Move> *best_moves) {
     if (state.occupied[move.field]) continue;
     DoMove(state, move);
     int value = -Search(state, depth - 1, -hi, -lo, nullptr);
-    if (best_moves) {
+    UndoMove(state, move);
+    if (best_move) {
       // Debug-print top-level evaluation.
       fprintf(stderr, "depth=%d move=%s value=%d [%d:%d]\n",
           depth, FormatMove(move), value, lo, hi);
     }
-    UndoMove(state, move);
-    if (best_moves && value >= best_value) {
-      // Collect all maximum-value moves in best_moves. This works even when
-      // using alpha-beta pruning, because best_moves is non-null only at the
-      // top level where hi = +inf, so best_value is never approximate and
-      // beta cut-offs do not occur.
-      if (value > best_value) best_moves->clear();
-      best_moves->push_back(move);
-    }
     if (value > best_value) {
       best_value = value;
-      if (best_value > lo) lo = value;
-      if (best_value >= hi) break;  // beta cut-off
+      if (best_move) {
+        *best_move = move;
+      }
+      if (best_value > lo) {
+        lo = best_value;
+        if (lo >= hi) break;  // beta cut-off
+      }
     }
   }
   return best_value;
 }
 
 Move SelectMove(State &state) {
-  vector<Move> best_moves;
-  int value = Search(state, max_search_depth, -1000, +1000, &best_moves);
-  fprintf(stderr, "value: %d\n", value);
-  CHECK(!best_moves.empty());
-  // TODO: pick a best move at random
-  return best_moves[0];
+  Move best_move;
+  int value = Search(state, max_search_depth, -1000, +1000, &best_move);
+  fprintf(stderr, "value: %d best_move: %s\n", value, FormatMove(best_move));
+  CHECK(IsValidMove(state, best_move));
+  return best_move;
 }
 
 int CoordsToFieldIndex(int u, int v) {
