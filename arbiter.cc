@@ -364,7 +364,13 @@ std::string EncodeHistory(const std::vector<Move> &moves) {
   return s;
 }
 
-void Main(const char *command_player1, const char *command_player2) {
+struct GameResult {
+  std::string transcript;
+  int score;
+  // TODO: add time taken by each player
+};
+
+GameResult RunGame(const char *command_player1, const char *command_player2) {
   Player players[2] = {
     SpawnPlayer(command_player1),
     SpawnPlayer(command_player2)};
@@ -435,17 +441,84 @@ void Main(const char *command_player1, const char *command_player2) {
   } else {
     assert(false);
   }
-  printf("%s %s%d\n",
-      EncodeHistory(history).c_str(), (score > 0 ? "+" : ""), score);
+  return {EncodeHistory(history), score};
+}
+
+// Maybe: support competition mode with random number of players?
+void Main(const char *player1_command, const char *player2_command, int rounds) {
+  int wins[2] = {0, 0};
+  int ties[2] = {0, 0};
+  int losses[2] = {0, 0};
+  int failures[2] = {0, 0};
+  int score_by_color[2][2] = {{0, 0}, {0, 0}};
+  int score[2] = {0, 0};
+  // TODO: total CPU time
+
+  const char *player_commands[2] = {player1_command, player2_command};
+  int games = rounds <= 0 ? 1 : 2*rounds;
+  for (int game = 0; game < games; ++game) {
+    int p = game & 1;
+    int q = 1 - p;
+    // Single match mode.
+    GameResult result = RunGame(player_commands[p], player_commands[q]);
+    printf("%4d: %s %s%d\n", game, result.transcript.c_str(),
+        (result.score > 0 ? "+" : ""), result.score);
+    score[p] += result.score;
+    score[q] -= result.score;
+    score_by_color[p][0] += result.score;
+    score_by_color[q][1] += -result.score;
+    wins[p] += result.score > 0;
+    wins[q] += result.score < 0;
+    ties[p] += result.score == 0;
+    ties[q] += result.score == 0;
+    losses[p] += result.score < 0;
+    losses[q] += result.score > 0;
+    failures[p] += result.score == -99;
+    failures[q] += result.score == +99;
+  }
+  if (games > 1) {
+    printf("\n");
+    printf("Player                         Wins Ties Loss Fail RedPts BluePt Total\n");
+    printf("------------------------------ ---- ---- ---- ---- ------ ------ ------\n");
+    for (int i = 0; i < 2; ++i) {
+      const char *command = player_commands[i];
+      while (strlen(command) > 30 && strchr(command, '/')) {
+        command = strchr(command, '/') + 1;
+      }
+      printf("%-30s %4d %4d %4d %4d %+6d %+6d %+6d\n",
+          command, wins[i], ties[i], losses[i], failures[i],
+          score_by_color[i][0], score_by_color[i][1], score[i]);
+    }
+  }
 }
 
 }  // namespace
 
 int main(int argc, char *argv[]) {
+  // TODO: support redirecting logs
+  //  --logs=<prefix> write to "${prefix}1.0.txt"
+
+  int opt_rounds = 0;
+  // Parse option arguments.
+  int j = 1;
+  for (int i = 1; i < argc; ++i) {
+    const char *arg = argv[i];
+    if (*arg != '-') {
+      argv[j++] = argv[i];
+      continue;
+    }
+    int value = 0;
+    if (sscanf(argv[i], "--rounds=%d", &value) == 1) {
+      opt_rounds = value;
+    } else {
+      fprintf(stderr, "Unrecognized option argument: '%s'!\n", argv[i]);
+    }
+  }
+  argc = j;
   if (argc != 3) {
-    printf("Usage: arbiter <player1> <player2>\n");
+    printf("Usage: arbiter [<--rounds=N>] <player1> <player2>\n");
     return 1;
   }
-  Main(argv[1], argv[2]);
+  Main(argv[1], argv[2], opt_rounds);
   return 0;
 }
