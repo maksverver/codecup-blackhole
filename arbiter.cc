@@ -157,6 +157,7 @@ void Quit(Player &player) {
   } else if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
     fprintf(stderr, "Player did not exit normally! status=%d\n", status);
   }
+  close(player.fd_out);
 }
 
 Player SpawnPlayer(const char *command) {
