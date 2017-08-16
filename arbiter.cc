@@ -395,40 +395,40 @@ void Main(const char *command_player1, const char *command_player2) {
     }
   }
   Write(players[0], "Start\n");
-  Color nextColor = NextColor(state);
-  while (nextColor != Color::NONE) {
+  Color next_color = NextColor(state);
+  while (next_color != Color::NONE) {
     Move move;
-    move.color = nextColor;
-    int nextPlayer = ColorToPlayerIndex(nextColor);
-    std::string line = ReadLine(players[nextPlayer]);
+    move.color = next_color;
+    int next_player = ColorToPlayerIndex(next_color);
+    std::string line = ReadLine(players[next_player]);
     if (!ParseMove(line, &move.field, &move.value)) {
       fprintf(stderr, "Could not parse move from player %d %s!\n",
-          nextPlayer, EscapeString(line).c_str());
+          next_player, EscapeString(line).c_str());
       break;
     }
     std::string reason;
     if (!ValidateMove(state, move, &reason)) {
       fprintf(stderr, "Invalid move from player %d %s: %s!\n",
-          nextPlayer, EscapeString(line).c_str(), reason.c_str());
+          next_player, EscapeString(line).c_str(), reason.c_str());
       break;
     }
     ExecuteMove(state, move);
     history.push_back(move);
-    nextColor = NextColor(state);
-    if (nextColor != Color::NONE) {
+    next_color = NextColor(state);
+    if (next_color != Color::NONE) {
       // Send player's move to other player.
       std::string line = FormatMove(move) + '\n';
-      Write(players[1 - nextPlayer], line);
+      Write(players[1 - next_player], line);
     }
   }
   int score = 0;
-  if (nextColor == Color::NONE) {
+  if (next_color == Color::NONE) {
     // Regular game end.
     score = CalculateScore(state);
-  } else if (nextColor == Color::RED) {
+  } else if (next_color == Color::RED) {
     // Red made an illegal move. Blue wins.
     score = -99;
-  } else if (nextColor == Color::BLUE) {
+  } else if (next_color == Color::BLUE) {
     // Blue made an illegal move. Red wins.
     score = +99;
   } else {
