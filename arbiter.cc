@@ -364,10 +364,17 @@ std::string EncodeHistory(const std::vector<Move> &moves) {
   return s;
 }
 
+double GetWallTime() {
+  struct timeval tv;
+  int res = gettimeofday(&tv, NULL);
+  assert(res == 0);
+  return tv.tv_sec + tv.tv_usec*1e-6;
+}
+
 struct GameResult {
   std::string transcript;
   int score;
-  // TODO: add time taken by each player
+  double walltime_used[2];
 };
 
 GameResult RunGame(const char *command_player1, const char *command_player2) {
@@ -401,6 +408,8 @@ GameResult RunGame(const char *command_player1, const char *command_player2) {
       Write(players[1], line);
     }
   }
+  double time_used[2] = {0.0, 0.0};
+  double time_start = GetWallTime();
   Write(players[0], "Start\n");
   Color next_color = NextColor(state);
   while (next_color != Color::NONE) {
@@ -408,6 +417,7 @@ GameResult RunGame(const char *command_player1, const char *command_player2) {
     move.color = next_color;
     int next_player = ColorToPlayerIndex(next_color);
     std::string line = ReadLine(players[next_player]);
+    time_used[next_player] += GetWallTime() - time_start;
     if (!ParseMove(line, &move.field, &move.value)) {
       fprintf(stderr, "Could not parse move from player %d %s!\n",
           next_player, EscapeString(line).c_str());
@@ -425,6 +435,7 @@ GameResult RunGame(const char *command_player1, const char *command_player2) {
     if (next_color != Color::NONE) {
       // Send player's move to other player.
       std::string line = FormatMove(move) + '\n';
+      time_start = GetWallTime();
       Write(players[1 - next_player], line);
     }
   }
@@ -441,7 +452,7 @@ GameResult RunGame(const char *command_player1, const char *command_player2) {
   } else {
     assert(false);
   }
-  return {EncodeHistory(history), score};
+  return {EncodeHistory(history), score, {time_used[0], time_used[1]}};
 }
 
 // Maybe: support competition mode with random number of players?
@@ -452,7 +463,8 @@ void Main(const char *player1_command, const char *player2_command, int rounds) 
   int failures[2] = {0, 0};
   int score_by_color[2][2] = {{0, 0}, {0, 0}};
   int score[2] = {0, 0};
-  // TODO: total CPU time
+  double total_time[2] = {0.0, 0.0};
+  double max_time[2] = {0.0, 0.0};
 
   const char *player_commands[2] = {player1_command, player2_command};
   int games = rounds <= 0 ? 1 : 2*rounds;
@@ -475,18 +487,23 @@ void Main(const char *player1_command, const char *player2_command, int rounds) 
     losses[q] += result.score > 0;
     failures[p] += result.score == -99;
     failures[q] += result.score == +99;
+    total_time[p] += result.walltime_used[0];
+    total_time[q] += result.walltime_used[1];
+    max_time[p] = std::max(max_time[p], result.walltime_used[0]);
+    max_time[q] = std::max(max_time[q], result.walltime_used[1]);
   }
   if (games > 1) {
     printf("\n");
-    printf("Player                         Wins Ties Loss Fail RedPts BluePt Total\n");
-    printf("------------------------------ ---- ---- ---- ---- ------ ------ ------\n");
+    printf("Player               AvgTm MaxTm Wins Ties Loss Fail RedPts BluePt Total\n");
+    printf("-------------------- ----- ----- ---- ---- ---- ---- ------ ------ ------\n");
     for (int i = 0; i < 2; ++i) {
       const char *command = player_commands[i];
-      while (strlen(command) > 30 && strchr(command, '/')) {
+      while (strlen(command) > 20 && strchr(command, '/')) {
         command = strchr(command, '/') + 1;
       }
-      printf("%-30s %4d %4d %4d %4d %+6d %+6d %+6d\n",
-          command, wins[i], ties[i], losses[i], failures[i],
+      printf("%-20s %.3f %.3f %4d %4d %4d %4d %+6d %+6d %+6d\n",
+          command, total_time[i]/games, max_time[i],
+          wins[i], ties[i], losses[i], failures[i],
           score_by_color[i][0], score_by_color[i][1], score[i]);
     }
   }
