@@ -510,6 +510,19 @@ vector<Move> DecodeStateString(const char *str) {
 
 }  // namespace
 
+// Usage:
+//
+//   player [<options>] [<base36-game-state>]
+//
+// base36-game-state: If given, continue from the given game state, instead of
+// starting with an empty board. The state must include at least the initial
+// brown stones. The first line of input must be "Start" or a valid move, which
+// determines which color the AI plays, as usual.
+//
+// Supported options:
+//
+//  -d<N> / --max_search_depth=<N>  set the maximum search depth to N
+//
 int main(int argc, char *argv[]) {
   vector<Move> history;
   for (int i = 1; i < argc; ++i) {
@@ -517,6 +530,13 @@ int main(int argc, char *argv[]) {
     if (!moves.empty()) {
       CHECK(history.empty());
       history.swap(moves);
+      continue;
+    }
+    int int_arg = 0;
+    if (sscanf(argv[i], "--max_search_depth=%d", &int_arg) == 1 ||
+        sscanf(argv[i], "-d%d", &int_arg) == 1) {
+      CHECK(int_arg > 0);
+      max_search_depth = int_arg;
       continue;
     }
     fprintf(stderr, "Ignored argument %d: [%s]\n", i, argv[i]);
