@@ -329,11 +329,11 @@ int Evaluate(State &state) {
 // then it is an upper or lower bound on the true value, respectively.
 int Search(State &state, int depth, int lo, int hi, Move *best_move) {
   assert(lo < hi);  // invariant maintained throughout this function
-
-  if (depth == 0 || IsGameOver(state)) {
+  if (depth == 0) {
     assert(!best_move);
     return Evaluate(state);
   }
+  assert(!IsGameOver(state));  // caller should make sure depth is limited
 
   int best_value = INT_MIN;
 
@@ -369,7 +369,9 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move) {
 
 Move SelectMove(State &state) {
   Move best_move;
-  int value = Search(state, max_search_depth, -1000, +1000, &best_move);
+  int search_depth = std::min(2*MAX_VALUE - state.moves_played, max_search_depth);
+  assert(search_depth > 0);
+  int value = Search(state, search_depth, -1000, +1000, &best_move);
   fprintf(stderr, "value: %d best_move: %s\n", value, FormatMove(best_move));
   CHECK(IsValidMove(state, best_move));
   return best_move;
