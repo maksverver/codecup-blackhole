@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -24,8 +25,11 @@ const int SIZE = 8;
 const int NUM_FIELDS = 36;
 const int INITIAL_STONES = 5;
 const int MAX_VALUE = 15;
+const int MAX_MOVES = 2*MAX_VALUE;
 
 int max_search_depth = 4;
+
+long long counter_search[MAX_MOVES + 1];
 
 const int neighbours[36][7] = {
   {1,8,-1},                //  0: A1 -> A2,B1
@@ -130,7 +134,7 @@ void MakeHole(State &state, int field) {
 }
 
 inline bool IsGameOver(const State &state) {
-  return state.moves_played >= 2*MAX_VALUE;
+  return state.moves_played >= MAX_MOVES;
 }
 
 // Returns the next player to move: 0 for red, 1 for blue.
@@ -329,10 +333,15 @@ int Evaluate(State &state) {
 // then it is an upper or lower bound on the true value, respectively.
 int Search(State &state, int depth, int lo, int hi, Move *best_move) {
   assert(lo < hi);  // invariant maintained throughout this function
+
+  // TODO: disable this in non-debug mode?
+  ++counter_search[depth];
+
   if (depth == 0) {
     assert(!best_move);
     return Evaluate(state);
   }
+
   assert(!IsGameOver(state));  // caller should make sure depth is limited
 
   int best_value = INT_MIN;
@@ -369,10 +378,13 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move) {
 
 Move SelectMove(State &state) {
   Move best_move;
-  int search_depth = std::min(2*MAX_VALUE - state.moves_played, max_search_depth);
+  int search_depth = std::min(MAX_MOVES - state.moves_played, max_search_depth);
   assert(search_depth > 0);
+  std::fill(&counter_search[0], &counter_search[search_depth + 1], 0LL);
   int value = Search(state, search_depth, -1000, +1000, &best_move);
-  fprintf(stderr, "value: %d best_move: %s\n", value, FormatMove(best_move));
+  fprintf(stderr, "value: %d best_move: %s evaluated", value, FormatMove(best_move));
+  for (int i = 0; i <= search_depth; ++i) fprintf(stderr, " %lld", counter_search[i]);
+  fprintf(stderr, " (%lld total)\n", std::accumulate(&counter_search[0], &counter_search[search_depth + 1], 0LL));
   CHECK(IsValidMove(state, best_move));
   return best_move;
 }
@@ -469,7 +481,7 @@ vector<Move> DecodeStateString(const char *str) {
   State state;
   int len = strlen(str);
   if (len < 2*INITIAL_STONES ||
-      len > 2*(INITIAL_STONES + 2*MAX_VALUE) ||
+      len > 2*(INITIAL_STONES + MAX_MOVES) ||
       len%2 != 0) {
     return result;
   }
