@@ -206,10 +206,8 @@ void DoMove(State &state, const Move &move) {
   state.used[player][move.value] = true;
   int v = player == 0 ? move.value : -move.value;
   state.value[move.field] = v;
-  for (int i : neighbours[move.field]) {
-    if (i < 0) break;
-    state.score[i] += v;
-  }
+  const int *ip = neighbours[move.field];
+  for (int i; (i = *ip) >= 0; ++ip) state.score[i] += v;
   ++state.moves_played;
 }
 
@@ -218,10 +216,8 @@ void UndoMove(State &state, const Move &move) {
   --state.moves_played;
   const int player = GetNextPlayer(state);
   int v = player == 0 ? move.value : -move.value;
-  for (int i : neighbours[move.field]) {
-    if (i < 0) break;
-    state.score[i] -= v;
-  }
+  const int *ip = neighbours[move.field];
+  for (int i; (i = *ip) >= 0; ++ip) state.score[i] -= v;
   assert(state.value[move.field] == v);
   state.value[move.field] = 0;
   assert(state.used[player][move.value]);
