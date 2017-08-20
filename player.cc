@@ -36,7 +36,7 @@ const int MAX_MOVES = 2*MAX_VALUE;
 
 int max_search_depth = 6;
 
-long long counter_search[MAX_MOVES + 1];
+vector<long long> counter_search;
 
 const int neighbours[36][7] = {
   {1,8,-1},                //  0: A1 -> A2,B1
@@ -385,7 +385,7 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move) {
   assert(lo < hi);  // invariant maintained throughout this function
 
   // TODO: disable this in non-debug mode?
-  ++counter_search[depth];
+  ++counter_search.at(depth);
 
   if (depth == 0) {
     assert(!best_move);
@@ -432,15 +432,15 @@ Move SelectMove(State &state) {
 
   int search_depth = std::min(MAX_MOVES - state.moves_played, max_search_depth);
   assert(search_depth > 0);
-  std::fill(&counter_search[0], &counter_search[search_depth + 1], 0LL);
+  counter_search.assign(search_depth + 1, 0LL);
 
   Move best_move;
   int value = Search(state, search_depth, -1000, +1000, &best_move);
 
   fprintf(stderr, "value: %d best_move: %s evals", value, FormatMove(best_move));
   for (int i = 0; i <= search_depth; ++i) fprintf(stderr, " %lld", counter_search[i]);
-  fprintf(stderr, " (%lld total)",
-      std::accumulate(&counter_search[0], &counter_search[search_depth + 1], 0LL));
+  fprintf(stderr, " (%lld total)\n",
+      std::accumulate(counter_search.begin(), counter_search.end(), 0LL));
   cpu_time_nanos = GetCpuTimeNanos() - cpu_time_nanos;
   wall_time_nanos = GetWallTimeNanos() - wall_time_nanos;
   fprintf(stderr, " time: %.3lfs cpu %.3lfs wall\n",
@@ -588,7 +588,7 @@ void PrintPlayerId() {
   fputc('\n', stderr);
 }
 
-enum class Mode { PLAY, ANALYZE };
+enum class Mode { PLAY, ANALYZE, BENCHMARK };
 
 struct Args {
   Mode mode = Mode::PLAY;
@@ -601,8 +601,9 @@ struct Args {
 //
 // Supported modes:
 //
-//    play     (default) Play a game.
-//    analyze  Analyze a single game state.
+//    play       (default) Play a game.
+//    analyze    Analyze a single game state.
+//    benchmark  Run benchmark on states read from stdin.
 //
 // Supported options:
 //
@@ -618,6 +619,11 @@ Args ParseArgs(int argc, char *argv[]) {
     if (strcmp(argv[i], "analyze") == 0) {
       CHECK(args.mode == Mode::PLAY);
       args.mode = Mode::ANALYZE;
+      continue;
+    }
+    if (strcmp(argv[i], "benchmark") == 0) {
+      CHECK(args.mode == Mode::PLAY);
+      args.mode = Mode::BENCHMARK;
       continue;
     }
     vector<Move> moves = DecodeStateString(argv[i]);
@@ -657,6 +663,24 @@ int Main(int argc, char *argv[]) {
     State state = GetState(args.transcript);
     Move move = SelectMove(state);
     fprintf(stderr, "Best move: %s\n", FormatMove(move));
+  } else if (args.mode == Mode::BENCHMARK) {
+    char line[1024];
+    vector<long long> total_search(MAX_MOVES + 1);
+    while (fgets(line, sizeof(line), stdin) != NULL) {
+      char *nl = strchr(line, '\n');
+      CHECK(nl != NULL);
+      *nl = '\0';
+      vector<Move> moves = DecodeStateString(line);
+      if (moves.empty()) {
+        fprintf(stderr, "Invalid state string: [%s]\n", line);
+        return 1;
+      }
+      State state = GetState(moves);
+      SelectMove(state);
+      for (size_t i = 0; i < counter_search.size(); ++i) total_search[i] += counter_search[i];
+    }
+    for (int i = 0; i <= MAX_MOVES && total_search[i]; ++i) fprintf(stderr, "%lld ", total_search[i]);
+    fprintf(stderr, "(total: %lld)\n", std::accumulate(total_search.begin(), total_search.end(), 0LL));
   }
   return 0;
 }
