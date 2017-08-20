@@ -569,7 +569,7 @@ vector<Move> DecodeStateString(const char *str) {
   return result;
 }
 
-static void PrintPlayerId() {
+void PrintPlayerId() {
   fprintf(stderr, "Supernova %d (gcc %s glibc++ %d)",
       PLAYER_VERSION, __VERSION__, __GLIBCXX__);
 #if __x86_64__
@@ -588,30 +588,42 @@ static void PrintPlayerId() {
   fputc('\n', stderr);
 }
 
-}  // namespace
+enum class Mode { PLAY, ANALYZE };
+
+struct Args {
+  Mode mode = Mode::PLAY;
+  vector<Move> transcript;
+};
 
 // Usage:
 //
-//   player [<options>] [<base36-game-state>]
+//   player [<mode>] [<options>] [<base36-game-state>]
 //
-// base36-game-state: If given, continue from the given game state, instead of
-// starting with an empty board. The state must include at least the initial
-// brown stones. The first line of input must be "Start" or a valid move, which
-// determines which color the AI plays, as usual.
+// Supported modes:
+//
+//    play     (default) Play a game.
+//    analyze  Analyze a single game state.
 //
 // Supported options:
 //
 //  -d<N> / --max_search_depth=<N>  set the maximum search depth to N
 //
-int main(int argc, char *argv[]) {
-  PrintPlayerId();
-
-  vector<Move> history;
+// base36-game-state: If given, continue from the given game state, instead of
+// starting with an empty board. The state must include at least the initial
+// brown stones. When playing a game, the first line of input must be "Start" or
+// a valid move, which determines which color the AI plays, as usual.
+Args ParseArgs(int argc, char *argv[]) {
+  Args args;
   for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "analyze") == 0) {
+      CHECK(args.mode == Mode::PLAY);
+      args.mode = Mode::ANALYZE;
+      continue;
+    }
     vector<Move> moves = DecodeStateString(argv[i]);
     if (!moves.empty()) {
-      CHECK(history.empty());
-      history.swap(moves);
+      CHECK(args.transcript.empty());
+      args.transcript = std::move(moves);
       continue;
     }
     int int_arg = 0;
@@ -623,14 +635,32 @@ int main(int argc, char *argv[]) {
     }
     fprintf(stderr, "Ignored argument %d: [%s]\n", i, argv[i]);
   }
-  if (history.empty()) {
-    history = ReadInitialStones();
+  return args;
+}
+
+int Main(int argc, char *argv[]) {
+  Args args = ParseArgs(argc, argv);
+  if (args.mode == Mode::PLAY) {
+    PrintPlayerId();
+    std::vector<Move> history = args.transcript;
     if (history.empty()) {
-      fprintf(stderr, "Failed to read initial stones!\n");
-      return 1;
+      history = ReadInitialStones();
+      if (history.empty()) {
+        fprintf(stderr, "Failed to read initial stones!\n");
+        return 1;
+      }
     }
+    RunGame(std::move(history));
+    fprintf(stderr, "Exiting.\n");
+  } else if (args.mode == Mode::ANALYZE) {
+    CHECK(!args.transcript.empty());
+    State state = GetState(args.transcript);
+    Move move = SelectMove(state);
+    fprintf(stderr, "Best move: %s\n", FormatMove(move));
   }
-  RunGame(std::move(history));
-  fprintf(stderr, "Exiting.\n");
   return 0;
 }
+
+}  // namespace
+
+int main(int argc, char *argv[]) { return Main(argc, argv); }
