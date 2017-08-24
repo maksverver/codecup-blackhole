@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
