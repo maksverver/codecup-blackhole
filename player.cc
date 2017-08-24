@@ -357,16 +357,13 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move) {
   while (move.value > 0 && state.used[player][move.value]) --move.value;
   CHECK(move.value > 0);
 
+  const bool debug_print = best_move != nullptr;
   for (; move.field < NUM_FIELDS; ++move.field) {
     if (state.occupied[move.field]) continue;
     DoMove(state, move);
     int value = -Search(state, depth - 1, -hi, -lo, nullptr);
     UndoMove(state, move);
-    if (best_move) {
-      // Debug-print top-level evaluation.
-      fprintf(stderr, "depth=%d move=%s value=%d [%d:%d]\n",
-          depth, FormatMove(move), value, lo, hi);
-    }
+    if (debug_print) fprintf(stderr, " %s:%d", FormatMove(move), value);
     if (value > best_value) {
       best_value = value;
       if (best_move) {
@@ -378,6 +375,7 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move) {
       }
     }
   }
+  if (debug_print) fputc('\n', stderr);
   return best_value;
 }
 
