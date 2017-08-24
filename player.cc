@@ -3,6 +3,10 @@
 #define NDEBUG 1
 #endif
 
+// Increment this before and after uploading a version to the CodeCup server.
+// Even numbers are released players. Odd numbers are development versions.
+#define PLAYER_VERSION 1
+
 #include <assert.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -509,6 +513,25 @@ vector<Move> DecodeStateString(const char *str) {
   return result;
 }
 
+static void PrintPlayerId() {
+  fprintf(stderr, "Supernova %d (gcc %s glibc++ %d)",
+      PLAYER_VERSION, __VERSION__, __GLIBCXX__);
+#if __x86_64__
+  fputs(" x86_64", stderr);
+#endif
+#if __OPTIMIZE__
+  fputs(" optimized", stderr);
+#endif
+#ifdef DEBUG
+  fputs(" debug", stderr);
+#endif
+#ifdef NDEBUG
+  fputs(" ndebug", stderr);
+  assert(0);
+#endif
+  fputc('\n', stderr);
+}
+
 }  // namespace
 
 // Usage:
@@ -525,6 +548,8 @@ vector<Move> DecodeStateString(const char *str) {
 //  -d<N> / --max_search_depth=<N>  set the maximum search depth to N
 //
 int main(int argc, char *argv[]) {
+  PrintPlayerId();
+
   vector<Move> history;
   for (int i = 1; i < argc; ++i) {
     vector<Move> moves = DecodeStateString(argv[i]);
