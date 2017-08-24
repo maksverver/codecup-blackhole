@@ -32,7 +32,7 @@ const int INITIAL_STONES = 5;
 const int MAX_VALUE = 15;
 const int MAX_MOVES = 2*MAX_VALUE;
 
-int max_search_depth = 4;
+int max_search_depth = 6;
 
 long long counter_search[MAX_MOVES + 1];
 
