@@ -377,7 +377,8 @@ int Evaluate(State &state) {
 // If the result is in [lo,hi] (excluding the boundaries), the value is exact.
 // If the result is less than or equal to lo, or greater than or equal to hi,
 // then it is an upper or lower bound on the true value, respectively.
-int Search(State &state, int depth, int lo, int hi, Move *best_move) {
+int Search(State &state, int depth, int lo, int hi, Move *best_move,
+    const vector<int> &fields_to_search) {
   assert(lo < hi);  // invariant maintained throughout this function
 
   // TODO: disable this in non-debug mode?
@@ -399,10 +400,11 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move) {
   CHECK(move.value > 0);
 
   const bool debug_print = best_move != nullptr;
-  for (; move.field < NUM_FIELDS; ++move.field) {
-    if (state.occupied[move.field]) continue;
+  for (int field : fields_to_search) {
+    if (state.occupied[field]) continue;
+    move.field = field;
     DoMove(state, move);
-    int value = -Search(state, depth - 1, -hi, -lo, nullptr);
+    int value = -Search(state, depth - 1, -hi, -lo, nullptr, fields_to_search);
     UndoMove(state, move);
     if (debug_print) fprintf(stderr, " %s:%d", FormatMove(move), value);
     if (value > best_value) {
@@ -420,6 +422,28 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move) {
   return best_value;
 }
 
+// Only search fields that are unoccupied, and order them by decreasing number
+// of liberties (i.e. number of unoccupied neighbouring fields). This means the
+// best fields appear first, which improves the beta-cutoff rate.
+vector<int> CalculateFieldsToSearch(const State &state) {
+  vector<int> result;
+  int liberties[NUM_FIELDS] = {};
+  for (int field = 0; field < NUM_FIELDS; ++field) {
+    if (!state.occupied[field]) {
+      result.push_back(field);
+      const int *fp = neighbours[field];
+      for (int f; (f = *fp) >= 0; ++fp) {
+        liberties[field] += !state.occupied[f];
+      }
+    }
+  }
+  std::random_shuffle(result.begin(), result.end());
+  std::stable_sort(result.begin(), result.end(), [&liberties](int f, int g) {
+    return liberties[f] > liberties[g];
+  });
+  return result;
+}
+
 Move SelectMove(State &state) {
   int64_t cpu_time_nanos = GetCpuTimeNanos();
   int64_t wall_time_nanos = GetWallTimeNanos();
@@ -431,7 +455,8 @@ Move SelectMove(State &state) {
   counter_search.assign(search_depth + 1, 0LL);
 
   Move best_move;
-  int value = Search(state, search_depth, -1000, +1000, &best_move);
+  int value = Search(state, search_depth, -1000, +1000, &best_move,
+      CalculateFieldsToSearch(state));
 
   fprintf(stderr, "value: %d best_move: %s evals", value, FormatMove(best_move));
   for (int i = 0; i <= search_depth; ++i) fprintf(stderr, " %lld", counter_search[i]);
