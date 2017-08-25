@@ -5,7 +5,7 @@
 
 // Increment this before and after uploading a version to the CodeCup server.
 // Even numbers are released players. Odd numbers are development versions.
-#define PLAYER_VERSION 1
+#define PLAYER_VERSION 2
 
 #include <assert.h>
 #include <execinfo.h>
