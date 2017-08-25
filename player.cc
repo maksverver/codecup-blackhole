@@ -351,7 +351,7 @@ void DumpState(const State &state, FILE *fp) {
   fputc('\n', fp);
 }
 
-void Validate(const State &state, const vector<Move> history) {
+void Validate(const State &state, const vector<Move> &history) {
   string reason;
   if (!IsValidState(state, history, &reason)) {
     fprintf(stderr, "State validation failed: %s\n", reason.c_str());
