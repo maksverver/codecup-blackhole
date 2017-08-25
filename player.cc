@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <algorithm>
 #include <numeric>
@@ -148,6 +149,20 @@ string Sprintf(const char *fmt, ...) {
   CHECK(size == static_cast<int>(result.size()) - 1);
   result.resize(size);
   return result;
+}
+
+const int64_t NANOS_PER_SECOND = 1000000000;
+
+int64_t GetWallTimeNanos() {
+  struct timespec tv;
+  CHECK(clock_gettime(CLOCK_MONOTONIC, &tv) == 0);
+  return NANOS_PER_SECOND*tv.tv_sec + tv.tv_nsec;
+}
+
+int64_t GetCpuTimeNanos() {
+  struct timespec tv;
+  CHECK(clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &tv) == 0);
+  return NANOS_PER_SECOND*tv.tv_sec + tv.tv_nsec;
 }
 
 const char *FormatMove(const Move &move) {
@@ -410,15 +425,27 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move) {
 }
 
 Move SelectMove(State &state) {
+  int64_t cpu_time_nanos = GetCpuTimeNanos();
+  int64_t wall_time_nanos = GetWallTimeNanos();
+
   DebugStateSwapper setter(state);
-  Move best_move;
+
   int search_depth = std::min(MAX_MOVES - state.moves_played, max_search_depth);
   assert(search_depth > 0);
   std::fill(&counter_search[0], &counter_search[search_depth + 1], 0LL);
+
+  Move best_move;
   int value = Search(state, search_depth, -1000, +1000, &best_move);
-  fprintf(stderr, "value: %d best_move: %s evaluated", value, FormatMove(best_move));
+
+  fprintf(stderr, "value: %d best_move: %s evals", value, FormatMove(best_move));
   for (int i = 0; i <= search_depth; ++i) fprintf(stderr, " %lld", counter_search[i]);
-  fprintf(stderr, " (%lld total)\n", std::accumulate(&counter_search[0], &counter_search[search_depth + 1], 0LL));
+  fprintf(stderr, " (%lld total)",
+      std::accumulate(&counter_search[0], &counter_search[search_depth + 1], 0LL));
+  cpu_time_nanos = GetCpuTimeNanos() - cpu_time_nanos;
+  wall_time_nanos = GetWallTimeNanos() - wall_time_nanos;
+  fprintf(stderr, " time: %.3lfs cpu %.3lfs wall\n",
+      1e-9*cpu_time_nanos, 1e-9*wall_time_nanos);
+
   CHECK(IsValidMove(state, best_move));
   return best_move;
 }
