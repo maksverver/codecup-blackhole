@@ -8,6 +8,7 @@
 #define PLAYER_VERSION 1
 
 #include <assert.h>
+#include <execinfo.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -87,11 +88,40 @@ struct Move {
   int value;
 };
 
+State *debug_state;
+
+struct DebugStateSwapper {
+  DebugStateSwapper(State &new_state) : old_state(debug_state) {
+    debug_state = &new_state;
+  }
+  ~DebugStateSwapper() { debug_state = old_state; }
+private:
+  DebugStateSwapper(const DebugStateSwapper&) = delete;
+  DebugStateSwapper &operator=(const DebugStateSwapper&) = delete;
+
+  State *old_state;
+};
+
+#define DebugStateSwapper(arg) MISUSE
+
+template <class T, size_t N>
+constexpr size_t ArraySize(T(&)[N]) { return N; }
+
+void DumpState(const State &state, FILE *fp);
+
 __attribute__((noreturn))
 void CheckFail(int line, const char *func, const char *expr) {
   fprintf(stderr, "[%s:%d] %s(): CHECK(%s) failed\n", __FILE__, line, func, expr);
-  // TODO: print a stack trace?
-  // TODO: dump global state?
+
+  // Print stack trace. Typically not very useful, unfortunately, since all
+  // functions are declared in the anonymous namespace.
+  void *symbols_buffer[100];
+  int symbols_size = backtrace(symbols_buffer, ArraySize(symbols_buffer));
+  backtrace_symbols_fd(symbols_buffer, symbols_size, 2);
+
+  // Print the global game state, if we have it.
+  if (debug_state) DumpState(*debug_state, stderr);
+
   abort();
 }
 
@@ -380,6 +410,7 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move) {
 }
 
 Move SelectMove(State &state) {
+  DebugStateSwapper setter(state);
   Move best_move;
   int search_depth = std::min(MAX_MOVES - state.moves_played, max_search_depth);
   assert(search_depth > 0);
