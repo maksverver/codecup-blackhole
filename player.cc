@@ -511,7 +511,19 @@ State GetState(const vector<Move> &history) {
   return state;
 }
 
+unsigned GetSeed(const vector<Move> &history) {
+  CHECK(history.size() >= INITIAL_STONES);
+  unsigned seed = 0x811c9dc5;
+  for (int i = 0; i < INITIAL_STONES; ++i) {
+    assert(history[i].value == 0);
+    seed ^= history[i].field;
+    seed *= 16777619;
+  }
+  return seed;
+}
+
 void RunGame(vector<Move> history) {
+  srand(GetSeed(history));
   State state = GetState(history);
   const char *line = ReadNextLine();
   if (line == nullptr) return;
