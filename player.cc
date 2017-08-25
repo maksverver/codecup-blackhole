@@ -523,6 +523,26 @@ unsigned GetSeed(const vector<Move> &history) {
   return seed;
 }
 
+string EncodeTranscript(const vector<Move> &history) {
+  string result;
+  result.resize(history.size()*2);
+  for (size_t i = 0; i < history.size(); ++i) {
+    int field = history[i].field;
+    int value = history[i].value;
+    int encoded_value;
+    if (i < INITIAL_STONES) {
+      CHECK(value == 0);
+      encoded_value = 0;
+    } else {
+      CHECK(1 <= value && value <= MAX_VALUE);
+      encoded_value = value + MAX_VALUE*((i - INITIAL_STONES)&1);
+    }
+    result[2*i + 0] = EncodeBase36Char(field);
+    result[2*i + 1] = EncodeBase36Char(encoded_value);
+  }
+  return result;
+}
+
 void RunGame(vector<Move> &history) {
   srand(GetSeed(history));
   State state = GetState(history);
@@ -539,6 +559,12 @@ void RunGame(vector<Move> &history) {
     Move move;
     if (GetNextPlayer(state) == my_player) {
       move = SelectMove(state);
+      // If this is the last move my player will play, then print a transcript
+      // just before sending the last move, to make sure it ends up in the logs.
+      if (MAX_MOVES - state.moves_played <= 2) {
+        fprintf(stderr, "Transcript: %s\n", EncodeTranscript(history).c_str());
+        fflush(stderr);
+      }
       WriteMove(move);
     } else {
       if (line == nullptr) {
@@ -682,26 +708,6 @@ Args ParseArgs(int argc, char *argv[]) {
   return args;
 }
 
-string EncodeTranscript(const vector<Move> &history) {
-  string result;
-  result.resize(history.size()*2);
-  for (size_t i = 0; i < history.size(); ++i) {
-    int field = history[i].field;
-    int value = history[i].value;
-    int encoded_value;
-    if (i < INITIAL_STONES) {
-      CHECK(value == 0);
-      encoded_value = 0;
-    } else {
-      CHECK(1 <= value && value <= MAX_VALUE);
-      encoded_value = value + MAX_VALUE*((i - INITIAL_STONES)&1);
-    }
-    result[2*i + 0] = EncodeBase36Char(field);
-    result[2*i + 1] = EncodeBase36Char(encoded_value);
-  }
-  return result;
-}
-
 int Main(int argc, char *argv[]) {
   Args args = ParseArgs(argc, argv);
   if (args.mode == Mode::PLAY) {
@@ -715,7 +721,6 @@ int Main(int argc, char *argv[]) {
       }
     }
     RunGame(history);
-    fprintf(stderr, "Transcript: %s\n", EncodeTranscript(history).c_str());
     fprintf(stderr, "Exiting.\n");
   } else if (args.mode == Mode::ANALYZE) {
     CHECK(!args.transcript.empty());
