@@ -461,7 +461,7 @@ Move SelectMove(State &state) {
 
   fprintf(stderr, "value: %d best_move: %s evals", value, FormatMove(best_move));
   for (int i = 0; i <= search_depth; ++i) fprintf(stderr, " %lld", counter_search[i]);
-  fprintf(stderr, " (%lld total)\n",
+  fprintf(stderr, " (%lld total)",
       std::accumulate(counter_search.begin(), counter_search.end(), 0LL));
   cpu_time_nanos = GetCpuTimeNanos() - cpu_time_nanos;
   wall_time_nanos = GetWallTimeNanos() - wall_time_nanos;
