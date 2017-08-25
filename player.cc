@@ -35,6 +35,7 @@ const int MAX_VALUE = 15;
 const int MAX_MOVES = 2*MAX_VALUE;
 
 int max_search_depth = 6;
+bool enable_move_ordering = false;
 
 vector<long long> counter_search;
 
@@ -437,10 +438,12 @@ vector<int> CalculateFieldsToSearch(const State &state) {
       }
     }
   }
-  std::random_shuffle(result.begin(), result.end());
-  std::stable_sort(result.begin(), result.end(), [&liberties](int f, int g) {
-    return liberties[f] > liberties[g];
-  });
+  if (enable_move_ordering) {
+    std::random_shuffle(result.begin(), result.end());
+    std::stable_sort(result.begin(), result.end(), [&liberties](int f, int g) {
+      return liberties[f] > liberties[g];
+    });
+  }
   return result;
 }
 
@@ -670,6 +673,10 @@ Args ParseArgs(int argc, char *argv[]) {
         sscanf(argv[i], "-d%d", &int_arg) == 1) {
       CHECK(int_arg > 0);
       max_search_depth = int_arg;
+      continue;
+    }
+    if (strcmp(argv[i], "-o") == 0) {
+      enable_move_ordering = true;
       continue;
     }
     fprintf(stderr, "Ignored argument %d: [%s]\n", i, argv[i]);
