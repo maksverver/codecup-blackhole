@@ -233,13 +233,11 @@ int DecodeBase36Char(char ch) {
   return -1;
 }
 
-/*
 char EncodeBase36Char(int i) {
   if (i >= 0 && i < 10) return '0' + i;
   if (i >= 10 && i < 36) return 'a' + i - 10;
   return '?';
 }
-*/
 
 const char *ReadNextLine() {
   static char buf[100];
@@ -525,7 +523,7 @@ unsigned GetSeed(const vector<Move> &history) {
   return seed;
 }
 
-void RunGame(vector<Move> history) {
+void RunGame(vector<Move> &history) {
   srand(GetSeed(history));
   State state = GetState(history);
   const char *line = ReadNextLine();
@@ -684,6 +682,26 @@ Args ParseArgs(int argc, char *argv[]) {
   return args;
 }
 
+string EncodeTranscript(const vector<Move> &history) {
+  string result;
+  result.resize(history.size()*2);
+  for (size_t i = 0; i < history.size(); ++i) {
+    int field = history[i].field;
+    int value = history[i].value;
+    int encoded_value;
+    if (i < INITIAL_STONES) {
+      CHECK(value == 0);
+      encoded_value = 0;
+    } else {
+      CHECK(1 <= value && value <= MAX_VALUE);
+      encoded_value = value + MAX_VALUE*((i - INITIAL_STONES)&1);
+    }
+    result[2*i + 0] = EncodeBase36Char(field);
+    result[2*i + 1] = EncodeBase36Char(encoded_value);
+  }
+  return result;
+}
+
 int Main(int argc, char *argv[]) {
   Args args = ParseArgs(argc, argv);
   if (args.mode == Mode::PLAY) {
@@ -696,7 +714,8 @@ int Main(int argc, char *argv[]) {
         return 1;
       }
     }
-    RunGame(std::move(history));
+    RunGame(history);
+    fprintf(stderr, "Transcript: %s\n", EncodeTranscript(history).c_str());
     fprintf(stderr, "Exiting.\n");
   } else if (args.mode == Mode::ANALYZE) {
     CHECK(!args.transcript.empty());
