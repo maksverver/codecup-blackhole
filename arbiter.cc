@@ -160,7 +160,7 @@ void Quit(Player &player) {
   close(player.fd_out);
 }
 
-Player SpawnPlayer(const char *command) {
+Player SpawnPlayer(const char *command, const char *log_filename) {
   int pipe_in[2];
   int pipe_out[2];
   if (pipe(pipe_in) != 0 || pipe(pipe_out) != 0) {
@@ -178,6 +178,15 @@ Player SpawnPlayer(const char *command) {
       perror("dup2()");
       exit(1);
     }
+    int fd_err = open(log_filename, O_CREAT | O_TRUNC | O_RDWR, 0666);
+    if (fd_err < 0) {
+      fprintf(stderr, "Cannot open logfile [%s]!\n", log_filename);
+      exit(1);
+    } else {
+      dup2(fd_err, 2);
+      close(fd_err);
+    }
+
     if (close(pipe_in[0]) != 0 || close(pipe_in[1]) != 0 ||
         close(pipe_out[0]) != 0 || close(pipe_out[1]) != 0) {
       perror("close()");
@@ -377,10 +386,11 @@ struct GameResult {
   double walltime_used[2];
 };
 
-GameResult RunGame(const char *command_player1, const char *command_player2) {
+GameResult RunGame(const char *command_player1, const char *command_player2,
+    const char *log_filename1, const char *log_filename2) {
   Player players[2] = {
-    SpawnPlayer(command_player1),
-    SpawnPlayer(command_player2)};
+    SpawnPlayer(command_player1, log_filename1),
+    SpawnPlayer(command_player2, log_filename2)};
   PlayerQuitter quit1(players[0]);
   PlayerQuitter quit2(players[1]);
 
@@ -456,7 +466,8 @@ GameResult RunGame(const char *command_player1, const char *command_player2) {
 }
 
 // Maybe: support competition mode with random number of players?
-void Main(const char *player1_command, const char *player2_command, int rounds) {
+void Main(const char *player1_command, const char *player2_command, int rounds,
+    const char *logs_prefix) {
   int wins[2] = {0, 0};
   int ties[2] = {0, 0};
   int losses[2] = {0, 0};
@@ -466,13 +477,25 @@ void Main(const char *player1_command, const char *player2_command, int rounds) 
   double total_time[2] = {0.0, 0.0};
   double max_time[2] = {0.0, 0.0};
 
+  char filename_buf[2][1024];
+
   const char *player_commands[2] = {player1_command, player2_command};
   int games = rounds <= 0 ? 1 : 2*rounds;
   for (int game = 0; game < games; ++game) {
     int p = game & 1;
     int q = 1 - p;
-    // Single match mode.
-    GameResult result = RunGame(player_commands[p], player_commands[q]);
+
+    if (strcmp(logs_prefix, "-") == 0) {
+      snprintf(filename_buf[0], sizeof(filename_buf[0]), "/dev/stderr");
+      snprintf(filename_buf[1], sizeof(filename_buf[1]), "/dev/stderr");
+    } else {
+      snprintf(filename_buf[0], sizeof(filename_buf[0]), "%s%04d_%d_%s",
+          logs_prefix, game, p, "red");
+      snprintf(filename_buf[1], sizeof(filename_buf[1]), "%s%04d_%d_%s",
+          logs_prefix, game, q, "blue");
+    }
+    GameResult result = RunGame(player_commands[p], player_commands[q],
+        filename_buf[0], filename_buf[1]);
     printf("%4d: %s %s%d\n", game, result.transcript.c_str(),
         (result.score > 0 ? "+" : ""), result.score);
     score[p] += result.score;
@@ -512,10 +535,8 @@ void Main(const char *player1_command, const char *player2_command, int rounds) 
 }  // namespace
 
 int main(int argc, char *argv[]) {
-  // TODO: support redirecting logs
-  //  --logs=<prefix> write to "${prefix}1.0.txt"
-
   int opt_rounds = 0;
+  const char *opt_logs_prefix = nullptr;
   // Parse option arguments.
   int j = 1;
   for (int i = 1; i < argc; ++i) {
@@ -527,15 +548,17 @@ int main(int argc, char *argv[]) {
     int value = 0;
     if (sscanf(argv[i], "--rounds=%d", &value) == 1) {
       opt_rounds = value;
+    } else if (strncmp(argv[i], "--logs=", strlen("--logs=")) == 0) {
+      opt_logs_prefix = arg + strlen("--logs=");
     } else {
       fprintf(stderr, "Unrecognized option argument: '%s'!\n", argv[i]);
     }
   }
   argc = j;
   if (argc != 3) {
-    printf("Usage: arbiter [<--rounds=N>] <player1> <player2>\n");
+    printf("Usage: arbiter [--rounds=<N>] [--logs=<filename-prefix>] <player1> <player2>\n");
     return 1;
   }
-  Main(argv[1], argv[2], opt_rounds);
+  Main(argv[1], argv[2], opt_rounds, opt_logs_prefix);
   return 0;
 }
