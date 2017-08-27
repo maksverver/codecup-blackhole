@@ -485,7 +485,10 @@ void Main(const char *player1_command, const char *player2_command, int rounds,
     int p = game & 1;
     int q = 1 - p;
 
-    if (strcmp(logs_prefix, "-") == 0) {
+    if (logs_prefix == nullptr) {
+      snprintf(filename_buf[0], sizeof(filename_buf[0]), "/dev/null");
+      snprintf(filename_buf[1], sizeof(filename_buf[1]), "/dev/null");
+    } else if (strcmp(logs_prefix, "-") == 0) {
       snprintf(filename_buf[0], sizeof(filename_buf[0]), "/dev/stderr");
       snprintf(filename_buf[1], sizeof(filename_buf[1]), "/dev/stderr");
     } else {
