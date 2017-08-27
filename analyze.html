@@ -12,8 +12,16 @@
 
   <!-- canvas size: SCALE*(4*1.6 + 2) x SCALE*(5*1.6 + 2)-->
   <div id="controls">
-    <canvas id="pieces" width="336" height="400"></canvas>
-    <p id="status"></p>
+    <div id="piecesHolder">
+      <canvas id="pieces" width="336" height="400"></canvas>
+    </div>
+    <div id="movesHolder">
+      <table id="moves">
+        <thead><tr><td></td><th>Red</th><th>Blue</th></thead>
+        <tbody></tbody>
+      </table>
+      <p id="status"></p>
+    </div>
     <p id="stateString"></p>
   </div><!-- id="controls" -->
 </div><!-- id="game" -->

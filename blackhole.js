@@ -116,6 +116,25 @@ function coordsToString(u, v) {
   return String.fromCharCode("A".charCodeAt(0) + u) + (v + 1);
 }
 
+function fieldIndexToCoords(i) {
+  let u = 0, v = i, n = SIZE;
+  while (v >= n) {
+    v -= n;
+    u += 1;
+    n -= 1;
+  }
+  return {u: u, v: v};
+}
+
+function fieldIndexToString(i) {
+  let coords = fieldIndexToCoords(i);
+  return coordsToString(coords.u, coords.v);
+}
+
+function moveToString(move) {
+  return fieldIndexToString(move.fieldIndex) + '=' + Math.abs(move.stoneValue);
+}
+
 function neighbours(u, v) {
   let neighbours = [];
   for (let du = -1; du <= 1; ++du) {
@@ -295,9 +314,26 @@ function updateStatusMessage(statusElem, state) {
   replaceText(statusElem, statusMessage);
 }
 
-function replaceText(elem, text) {
+function removeChildren(elem) {
   while (elem.firstChild) elem.removeChild(elem.firstChild);
+}
+
+function replaceText(elem, text) {
+  removeChildren(elem);
   elem.appendChild(document.createTextNode(text));
+}
+
+function updateMovesTable(state) {
+  if (!globalMovesTableCells) return;
+  for (let i = 0; i < globalMovesTableCells.length; ++i) {
+    let td = globalMovesTableCells[i];
+    if (i < state.history.length - INITIAL_STONES) {
+      var move = state.history[i + INITIAL_STONES];
+      replaceText(td, moveToString(move));
+    } else {
+      removeChildren(td);
+    }
+  }
 }
 
 function updateState(newState) {
@@ -306,12 +342,15 @@ function updateState(newState) {
   setSelectedPiece(globalSelectedPiece);
   updateStatusMessage(statusElem, globalState);
   if (stateStringElem) replaceText(stateStringElem, encodeState(newState));
+  updateMovesTable(newState);
 }
 
 let boardCanvas = document.getElementById('board');
 let piecesCanvas = document.getElementById('pieces');
 let statusElem = document.getElementById('status');
 let stateStringElem = document.getElementById('stateString');
+let movesTable = document.getElementById('moves');
+let globalMovesTableCells = null;
 
 if (boardCanvas) {
   boardCanvas.addEventListener('click', function(event) {
@@ -346,4 +385,25 @@ if (piecesCanvas) {
 
   // Hack to stop clicks on the canvas from causing surrounding text to be selected.
   piecesCanvas.onmousedown = function() {return false};
+}
+
+if (movesTable) {
+  let elements = movesTable.getElementsByTagName('tbody');
+  if (elements.length > 0) {
+    var tbody = elements[0];
+    globalMovesTableCells = [];
+    removeChildren(tbody);
+    for (var i = 0; i < 15; ++i) {
+      var tr = document.createElement('tr');
+      var th = document.createElement('th');
+      th.appendChild(document.createTextNode(i + 1));
+      tr.appendChild(th);
+      for (var j = 0; j < 2; ++j) {
+        var td = document.createElement('td');
+        globalMovesTableCells.push(td);
+        tr.appendChild(td);
+      }
+      tbody.append(tr);
+    }
+  }
 }
