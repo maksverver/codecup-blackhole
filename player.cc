@@ -95,6 +95,16 @@ struct Move {
   int value;
 };
 
+/*
+bool operator==(const Move &a, const Move &b) {
+  return a.field == b.field && a.value == b.value;
+}
+*/
+
+bool operator<(const Move &a, const Move &b) {
+  return a.field < b.field || (a.field == b.field && a.value < b.value);
+}
+
 State *debug_state;
 
 struct DebugStateSwapper {
@@ -381,7 +391,7 @@ int Evaluate(State &state) {
 // If the result is in [lo,hi] (excluding the boundaries), the value is exact.
 // If the result is less than or equal to lo, or greater than or equal to hi,
 // then it is an upper or lower bound on the true value, respectively.
-int Search(State &state, int depth, int lo, int hi, Move *best_move,
+int Search(State &state, int depth, int lo, int hi, vector<Move> *best_moves,
     const vector<int> &fields_to_search) {
   assert(lo < hi);  // invariant maintained throughout this function
 
@@ -389,7 +399,7 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move,
   ++counter_search.at(depth);
 
   if (depth == 0) {
-    assert(!best_move);
+    assert(!best_moves);
     return Evaluate(state);
   }
 
@@ -397,7 +407,7 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move,
 
   int best_value = INT_MIN;
 
-  const bool debug_print = best_move != nullptr;
+  const bool debug_print = best_moves != nullptr;
   const int player = GetNextPlayer(state);
   for (int value = MAX_VALUE; value > 0; --value) {
     if (state.used[player][value]) continue;
@@ -408,14 +418,19 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move,
       int value = -Search(state, depth - 1, -hi, -lo, nullptr, fields_to_search);
       UndoMove(state, move);
       if (debug_print) fprintf(stderr, " %s:%d", FormatMove(move), value);
+      if (best_moves && value >= best_value) {
+        if (value > best_value) best_moves->clear();
+        best_moves->push_back(move);
+      }
       if (value > best_value) {
         best_value = value;
-        if (best_move) {
-          *best_move = move;
-        }
         if (best_value > lo) {
+          if (best_value >= hi) goto beta_cutoff;
           lo = best_value;
-          if (lo >= hi) goto beta_cutoff;
+          // This is necessary to get all best moves. Otherwise, future values
+          // equal to best_value are only upper bounds, and only the first
+          // element of best_moves is guaranteed to be a "best" move.
+          if (best_moves) --lo;
         }
       }
     }
@@ -460,9 +475,13 @@ Move SelectMove(State &state) {
   assert(search_depth > 0);
   counter_search.assign(search_depth + 1, 0LL);
 
-  Move best_move;
-  int value = Search(state, search_depth, -1000, +1000, &best_move,
+  vector<Move> best_moves;
+  int value = Search(state, search_depth, -1000, +1000, &best_moves,
       CalculateFieldsToSearch(state));
+  CHECK(!best_moves.empty());
+  // Always return the best move with the lowest field index. This seems to
+  // result in stronger play, though I have no idea why!
+  Move best_move = *std::min_element(best_moves.begin(), best_moves.end());
 
   fprintf(stderr, "value: %d best_move: %s evals", value, FormatMove(best_move));
   for (int i = 0; i <= search_depth; ++i) fprintf(stderr, " %lld", counter_search[i]);
