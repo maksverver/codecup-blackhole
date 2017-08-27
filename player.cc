@@ -430,11 +430,11 @@ beta_cutoff:
 // of liberties (i.e. number of unoccupied neighbouring fields). This means the
 // best fields appear first, which improves the beta-cutoff rate.
 vector<int> CalculateFieldsToSearch(const State &state) {
-  vector<int> result;
+  vector<int> fields;
   int liberties[NUM_FIELDS] = {};
   for (int field = 0; field < NUM_FIELDS; ++field) {
     if (!state.occupied[field]) {
-      result.push_back(field);
+      fields.push_back(field);
       const int *fp = neighbours[field];
       for (int f; (f = *fp) >= 0; ++fp) {
         liberties[field] += !state.occupied[f];
@@ -442,12 +442,12 @@ vector<int> CalculateFieldsToSearch(const State &state) {
     }
   }
   if (enable_move_ordering) {
-    std::random_shuffle(result.begin(), result.end());
-    std::stable_sort(result.begin(), result.end(), [&liberties](int f, int g) {
+    std::random_shuffle(fields.begin(), fields.end());
+    std::stable_sort(fields.begin(), fields.end(), [&liberties](int f, int g) {
       return liberties[f] > liberties[g];
     });
   }
-  return result;
+  return fields;
 }
 
 Move SelectMove(State &state) {
