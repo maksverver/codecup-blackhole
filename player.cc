@@ -37,6 +37,11 @@ const int MAX_MOVES = 2*MAX_VALUE;
 int max_search_depth = 6;
 bool enable_move_ordering = false;
 
+// Heuristic: it always pays off to play the highest possible value. This
+// assumption allows us to cut the search space dramatically, seemingly
+// without sacrificing much strength.
+bool always_play_top_value = true;
+
 vector<long long> counter_search;
 
 const int neighbours[36][7] = {
@@ -392,31 +397,31 @@ int Search(State &state, int depth, int lo, int hi, Move *best_move,
 
   int best_value = INT_MIN;
 
-  // We always play the highest-value piece next.
-  const int player = GetNextPlayer(state);
-  Move move = {0, MAX_VALUE};
-  while (move.value > 0 && state.used[player][move.value]) --move.value;
-  CHECK(move.value > 0);
-
   const bool debug_print = best_move != nullptr;
-  for (int field : fields_to_search) {
-    if (state.occupied[field]) continue;
-    move.field = field;
-    DoMove(state, move);
-    int value = -Search(state, depth - 1, -hi, -lo, nullptr, fields_to_search);
-    UndoMove(state, move);
-    if (debug_print) fprintf(stderr, " %s:%d", FormatMove(move), value);
-    if (value > best_value) {
-      best_value = value;
-      if (best_move) {
-        *best_move = move;
-      }
-      if (best_value > lo) {
-        lo = best_value;
-        if (lo >= hi) break;  // beta cut-off
+  const int player = GetNextPlayer(state);
+  for (int value = MAX_VALUE; value > 0; --value) {
+    if (state.used[player][value]) continue;
+    for (int field : fields_to_search) {
+      if (state.occupied[field]) continue;
+      Move move = {field, value};
+      DoMove(state, move);
+      int value = -Search(state, depth - 1, -hi, -lo, nullptr, fields_to_search);
+      UndoMove(state, move);
+      if (debug_print) fprintf(stderr, " %s:%d", FormatMove(move), value);
+      if (value > best_value) {
+        best_value = value;
+        if (best_move) {
+          *best_move = move;
+        }
+        if (best_value > lo) {
+          lo = best_value;
+          if (lo >= hi) goto beta_cutoff;
+        }
       }
     }
+    if (always_play_top_value) break;
   }
+beta_cutoff:
   if (debug_print) fputc('\n', stderr);
   return best_value;
 }
