@@ -35,7 +35,7 @@ const int MAX_VALUE = 15;
 const int MAX_MOVES = 2*MAX_VALUE;
 
 int max_search_depth = 6;
-bool enable_move_ordering = false;
+bool enable_move_ordering = true;
 
 // Heuristic: it always pays off to play the highest possible value. This
 // assumption allows us to cut the search space dramatically, seemingly
@@ -723,7 +723,7 @@ Args ParseArgs(int argc, char *argv[]) {
       max_search_depth = int_arg;
       continue;
     }
-    if (strcmp(argv[i], "-o") == 0) {
+    if (strcmp(argv[i], "+o") == 0) {
       enable_move_ordering = true;
       continue;
     }
