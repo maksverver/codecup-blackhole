@@ -3,9 +3,11 @@
 #define NDEBUG 1
 #endif
 
+#define PLAYER_NAME "Sagittarius A*"
+
 // Increment this before and after uploading a version to the CodeCup server.
 // Even numbers are released players. Odd numbers are development versions.
-#define PLAYER_VERSION 3
+#define PLAYER_VERSION 4
 
 #include <assert.h>
 #include <execinfo.h>
@@ -34,7 +36,9 @@ const int INITIAL_STONES = 5;
 const int MAX_VALUE = 15;
 const int MAX_MOVES = 2*MAX_VALUE;
 
-int max_search_depth = 6;
+const int min_search_depth = 6;
+int max_search_depth = 30;
+int64_t max_nodes = 2500000;  // 2.5m
 bool enable_move_ordering = true;
 
 // Heuristic: it always pays off to play the highest possible value. This
@@ -42,7 +46,10 @@ bool enable_move_ordering = true;
 // without sacrificing much strength.
 bool always_play_top_value = true;
 
-vector<long long> counter_search;
+vector<int64_t> counter_search;
+
+int64_t wall_time_start_nanos;
+int64_t wall_time_suspended_nanos;
 
 const int neighbours[36][7] = {
   {1,8,-1},                //  0: A1 -> A2,B1
@@ -256,7 +263,10 @@ char EncodeBase36Char(int i) {
 
 const char *ReadNextLine() {
   static char buf[100];
-  if (fgets(buf, sizeof(buf), stdin) == nullptr) {
+  int64_t wall_time_nanos = GetWallTimeNanos();
+  const char *res = fgets(buf, sizeof(buf), stdin);
+  wall_time_suspended_nanos += GetWallTimeNanos() - wall_time_nanos;
+  if (res == nullptr) {
     fprintf(stderr, "EOF reached!\n");
     return nullptr;
   }
@@ -471,27 +481,48 @@ Move SelectMove(State &state) {
 
   DebugStateSwapper setter(state);
 
-  int search_depth = std::min(MAX_MOVES - state.moves_played, max_search_depth);
-  assert(search_depth > 0);
-  counter_search.assign(search_depth + 1, 0LL);
+  Move best_move;
+  const vector<int> fields = CalculateFieldsToSearch(state);
+  const int moves_left = MAX_MOVES - state.moves_played;
+  int64_t total_evals = 0;
+  int search_depth = min_search_depth;
+  for (;;) {
+    int d = std::min(search_depth, moves_left);
+    counter_search.assign(d + 1, 0);
 
-  vector<Move> best_moves;
-  int value = Search(state, search_depth, -1000, +1000, &best_moves,
-      CalculateFieldsToSearch(state));
-  CHECK(!best_moves.empty());
-  // Always return the best move with the lowest field index. This seems to
-  // result in stronger play, though I have no idea why!
-  Move best_move = *std::min_element(best_moves.begin(), best_moves.end());
+    vector<Move> best_moves;
+    int value = Search(state, d, -1000, +1000, &best_moves, fields);
+    CHECK(!best_moves.empty());
+    // Always return the best move with the lowest field index. This seems to
+    // result in stronger play, though I have no idea why!
+    best_move = *std::min_element(best_moves.begin(), best_moves.end());
 
-  fprintf(stderr, "value: %d best_move: %s evals", value, FormatMove(best_move));
-  for (int i = 0; i <= search_depth; ++i) fprintf(stderr, " %lld", counter_search[i]);
-  fprintf(stderr, " (%lld total)",
-      std::accumulate(counter_search.begin(), counter_search.end(), 0LL));
+    fprintf(stderr, "d=%d v=%d best=%s ", d, value, FormatMove(best_move));
+    for (int i = 0; i <= search_depth; ++i) {
+      fprintf(stderr, " %lld", (long long)counter_search[i]);
+    }
+    fputc('\n', stderr);
+    int64_t counter_search_sum = std::accumulate(counter_search.begin(), counter_search.end(), 0);
+    total_evals += counter_search_sum;
+
+    // If we searched to the end of the game, there is no point in going deeper.
+    if (d == moves_left) break;
+
+    search_depth += 2;
+    if (search_depth > max_search_depth) break;
+
+    // Heuristic: we expect each depth increase to multiply the number of
+    // positions searched by a factor equal to the number of moves left.
+    if (total_evals + moves_left*total_evals > max_nodes) break;
+  }
   cpu_time_nanos = GetCpuTimeNanos() - cpu_time_nanos;
   wall_time_nanos = GetWallTimeNanos() - wall_time_nanos;
-  fprintf(stderr, " time: %.3lfs cpu %.3lfs wall\n",
-      1e-9*cpu_time_nanos, 1e-9*wall_time_nanos);
-
+  double cpu_time_secs = 1e-9*cpu_time_nanos;
+  double wall_time_secs = 1e-9*wall_time_nanos;
+  if (cpu_time_secs > 0.1) {
+    fprintf(stderr, "%.3lfs cpu %.3lfs wall %.3fm/s\n",
+        cpu_time_secs, wall_time_secs, total_evals*1e3/cpu_time_nanos);
+  }
   CHECK(IsValidMove(state, best_move));
   return best_move;
 }
@@ -587,6 +618,11 @@ void RunGame(vector<Move> &history) {
       // just before sending the last move, to make sure it ends up in the logs.
       if (MAX_MOVES - state.moves_played <= 2) {
         fprintf(stderr, "Transcript: %s\n", EncodeTranscript(history).c_str());
+        double wall_time_used = (GetWallTimeNanos() - wall_time_start_nanos -
+            wall_time_suspended_nanos)/1e9;
+        double cpu_time_used = GetCpuTimeNanos()/1e9;
+        fprintf(stderr, "Total time used: %.3lfs wall %.3lfs cpu\n",
+                wall_time_used, cpu_time_used);
         fflush(stderr);
       }
       WriteMove(move);
@@ -654,8 +690,8 @@ vector<Move> DecodeStateString(const char *str) {
 }
 
 void PrintPlayerId() {
-  fprintf(stderr, "Supernova %d (gcc %s glibc++ %d)",
-      PLAYER_VERSION, __VERSION__, __GLIBCXX__);
+  fprintf(stderr, "%s %d (gcc %s glibc++ %d)",
+      PLAYER_NAME, PLAYER_VERSION, __VERSION__, __GLIBCXX__);
 #if __x86_64__
   fputs(" x86_64", stderr);
 #endif
@@ -692,6 +728,7 @@ struct Args {
 // Supported options:
 //
 //  -d<N> / --max_search_depth=<N>  set the maximum search depth to N
+//  --max_nodes=<N>                 set target number of nodes to evaluate to N
 //
 // base36-game-state: If given, continue from the given game state, instead of
 // starting with an empty board. The state must include at least the initial
@@ -723,6 +760,12 @@ Args ParseArgs(int argc, char *argv[]) {
       max_search_depth = int_arg;
       continue;
     }
+    long long long_arg = 0;
+    if (sscanf(argv[i], "--max_nodes=%lld", &long_arg) == 1) {
+      CHECK(max_nodes > 0);
+      max_nodes = long_arg;
+      continue;
+    }
     if (strcmp(argv[i], "+o") == 0) {
       enable_move_ordering = true;
       continue;
@@ -733,6 +776,8 @@ Args ParseArgs(int argc, char *argv[]) {
 }
 
 int Main(int argc, char *argv[]) {
+  wall_time_start_nanos = GetWallTimeNanos();
+
   Args args = ParseArgs(argc, argv);
   if (args.mode == Mode::PLAY) {
     PrintPlayerId();
@@ -753,7 +798,7 @@ int Main(int argc, char *argv[]) {
     fprintf(stderr, "Best move: %s\n", FormatMove(move));
   } else if (args.mode == Mode::BENCHMARK) {
     char line[1024];
-    vector<long long> total_search(MAX_MOVES + 1);
+    vector<int64_t> total_search(MAX_MOVES + 1);
     while (fgets(line, sizeof(line), stdin) != NULL) {
       char *nl = strchr(line, '\n');
       CHECK(nl != NULL);
@@ -767,7 +812,9 @@ int Main(int argc, char *argv[]) {
       SelectMove(state);
       for (size_t i = 0; i < counter_search.size(); ++i) total_search[i] += counter_search[i];
     }
-    for (int i = 0; i <= MAX_MOVES && total_search[i]; ++i) fprintf(stderr, "%lld ", total_search[i]);
+    for (int i = 0; i <= MAX_MOVES && total_search[i]; ++i) {
+      fprintf(stderr, "%lld ", (long long)total_search[i]);
+    }
     fprintf(stderr, "(total: %lld)\n", std::accumulate(total_search.begin(), total_search.end(), 0LL));
   }
   return 0;
