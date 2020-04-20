@@ -1,0 +1,96 @@
+Black Hole: compact game state encoding, including move history.
+
+base36digits = 0..9 a..z
+
+fields = [
+  "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8",
+     "B1", "B2", "B3", "B4", "B5", "B6", "B7",
+        "C1", "C2", "C3", "C4", "C5", "C6",
+           "D1", "D2", "D3", "D4", "D5",
+               "E1", "E2", "E3", "E4",
+                  "F1", "F2", "F3",
+                     "G1", "G2",
+                        "H1"]
+
+A state is a string of even length, between 10 and 70 characters long. Each pair
+of characters encodes a move, consisting of a field and a stone color.
+
+ 1. Field index (in base 36)
+
+    Standard field coordinates encoded in base 36:
+
+              0
+             8 1
+            f 9 2
+           l g a 3
+          q m h b 4
+         u r n i c 5
+        x v s o j d 6
+       z y w t p k e 7
+
+ 2. Stone color (in base 36 -- only the first 31 values are used)
+
+          0: brown stone
+      1..15: red stones, with values 1..15
+     16..30: blue stones, with values 1..15 (offset by 15)
+     31..35: not used
+
+For a state to represent a valid game, the first five stones must be brown.
+The next stone (if present), must be red, and subsequent stones must alternate
+between blue and red. The game is over when 35 stones have been placed. The
+state string will then be 70 characters long.
+
+Example:
+
+  state = {
+    "holes": ["E4", "F2", "A5", "A7", "C1"],
+    "moves": [
+      "D3=15", "B1=9", "C5=14", "B4=15", "B3=13", "D4=14", "E1=12",
+      "B2=6", "A2=11", "E3=3", "B5=10", "E2=4", "B7=9", "A3=10",
+      "G1=8", "C2=12", "C3=7", "D1=2", "A4=1", "C4=13", "F3=6",
+      "B6=8", "D5=5", "G2=11", "H1=3", "D2=5", "A1=4", "F1=7",
+      "A6=2", "C6=1"]
+  }
+
+Will be encoded as:
+
+  "t0v04060f0nf8ojebuadotqc9l1bsicarje92px8grh7lh31isw6dnp5yqz3mk04um52kg"
+
+This representation is reasonably compact, easy to parse, easy to copy/paste,
+and doesn't use characters which must be encoded in URLs. Since the state
+encodes the entire move history, any previous state can be recovered by removing
+characters from the end of the string (two at a time) until the first 10
+characters remain (or if the number of brown stones is considered variable:
+until the last character is '0').
+
+To create a canonical representation of the starting state, the initial fields
+should be sorted ("t0v04060f0" => "4060f0t0v0"), but this is not usually needed.
+
+Alternatives:
+
+ 1. If we add a 37th digit (e.g. '_') then we can encode a board state in
+    exactly 35 characters:
+      - 5 characters to encode the positions of the brown stones
+      - 15 characters to encode the positions of the red stones (values 1..15)
+      - 15 characters to encode the positions of the blue stones (values 1..15)
+    If a stone has been placed on the board, the field index is encoded using a
+    base 36 digit, as before. If the stone has not yet been placed, the extra
+    digit is used instead.
+ 
+    The final state in the example game would be encoded as:
+    "tv46f35z0pwhxec1qajnklsrm9ud82ygiob"
+    (Note that this is equivalent to taking the first character of each pair in
+    the 70-character string, sorting them by the second character of the pair.)
+    And the state after the first 10 moves would be encoded as:
+    "tv46f__________1qajn__s__9__8____ob"
+ 
+    To create a canonical representation, the first five characters should be
+    sorted, since the brown stones don't have a value and are interchangable.
+ 
+    This representation has the advantage that it is even more compact. However,
+    the disadvantage is that it only encodes one game state, and not the entire
+    move history. That makes it less useful to store transcripts.
+ 
+ 2. A starting states (consisting of brown stones only) could be encoded using
+    just the first five characters of the encoding mentioned above. For example,
+    "tv46f" (or canonically, "46tfv").
