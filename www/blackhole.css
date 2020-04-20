@@ -1,0 +1,35 @@
+body {
+  font: 12pt sans-serif;
+}
+
+canvas#board {
+  background: white;
+  float: left;
+  margin-right: 1em;
+}
+
+div#controls {
+  float: left;
+}
+
+div#piecesHolder {
+  float: left;
+}
+
+canvas#pieces {
+  background: #f0f0f0;
+  margin-right: 1em;
+}
+
+div#movesHolder {
+  float: left;
+}
+
+#stateString {
+  color: darkgreen;
+  font: 10pt monospace;
+}
+
+table#moves tbody td {
+  text-align: center;
+}
